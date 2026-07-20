@@ -177,13 +177,23 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
                         self._window.post({"command": "error",
                                            "message": "No file data received"})
                     return
-                self._analyze_from_b64(name, data_b64)
+                import threading
+                threading.Thread(
+                    target=self._analyze_from_b64,
+                    args=(name, data_b64),
+                    daemon=True
+                ).start()
 
             elif command == "compare":
                 name = data.get("name", "unknown")
                 data_b64 = data.get("data_b64", "")
                 if data_b64:
-                    self._do_compare_from_b64(name, data_b64)
+                    import threading
+                    threading.Thread(
+                        target=self._do_compare_from_b64,
+                        args=(name, data_b64),
+                        daemon=True
+                    ).start()
 
         self._window = orca.host.ui.create_window(
             html=picker_html,
@@ -239,7 +249,13 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
                     name = msg.get("name", "unknown")
                     b64 = msg.get("data_b64", "")
                     if b64:
-                        self._do_compare_from_b64(name, b64)
+                        # Offload heavy parsing to background thread
+                        import threading
+                        threading.Thread(
+                            target=self._do_compare_from_b64,
+                            args=(name, b64, filename),
+                            daemon=True
+                        ).start()
 
             self._window = orca.host.ui.create_window(
                 html=html,
@@ -255,13 +271,14 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
                 pass
 
 
-    def _do_compare_from_b64(self, filename, data_b64):
-        """Decode base64 comparison file and push data to the HTML window."""
+    def _do_compare_from_b64(self, filename, data_b64, original_filename=""):
+        """Decode base64 comparison file, parse, and open new comparison window.
+
+        Runs in a background thread — must NOT call UI directly.
+        Uses orca.host.ui which marshals calls to the UI thread.
+        """
         import base64
         import tempfile
-
-        if not self._window or not self._window.is_open():
-            return
 
         raw = base64.b64decode(data_b64)
         ext = os.path.splitext(filename)[1].lower()
@@ -271,19 +288,45 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
             tmp_path = tmp.name
 
         try:
-            f2_data = parse_file_data(tmp_path)
-            if not f2_data:
-                self._window.post({
-                    "command": "compare_error",
-                    "error": f"Failed to parse {filename}"
-                })
+            if ext == ".3mf":
+                f2_data = parse_file_data(tmp_path)
+            elif ext == ".gcode":
+                f2_data = parse_file_data_from_gcode(tmp_path, {})
+            else:
+                return
+
+            if not f2_data or not self._f1_data:
                 return
 
             html = generate_html(self._f1_data, f2_data)
-            self._window.post({
-                "command": "comparison_data",
-                "html": html,
-            })
+
+            # Close old window and open new one with comparison
+            if self._window and self._window.is_open():
+                self._window.close()
+
+            title = f"Slice Heating Inspector — {original_filename} vs {filename}"
+
+            def on_compare_message(msg):
+                if not isinstance(msg, dict):
+                    return
+                if msg.get("command") == "compare":
+                    name = msg.get("name", "unknown")
+                    b64 = msg.get("data_b64", "")
+                    if b64:
+                        import threading
+                        threading.Thread(
+                            target=self._do_compare_from_b64,
+                            args=(name, b64, original_filename),
+                            daemon=True
+                        ).start()
+
+            self._window = orca.host.ui.create_window(
+                html=html,
+                title=title,
+                width=1400,
+                height=900,
+                on_message=on_compare_message,
+            )
         finally:
             try:
                 os.unlink(tmp_path)

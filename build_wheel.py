@@ -32,6 +32,7 @@ PACKAGE_FILES = [
     "orca_slice_heating_inspector.py",  # entry point → __init__.py
     "gcode_parser.py",
     "thermal_plotter.py",
+    "template.html",
 ]
 
 
