@@ -572,7 +572,7 @@ function drawPinButtons() {
         const btnW = isPinned ? 72 : 52;
         const btnH = 22;
         const bx = width - marginRight - btnW - 10;
-        const by = firstPanel.yStart + 4;
+        const by = firstPanel.yStart + firstPanel.height - btnH - 4;
         pinButtons.push({x: bx, y: by, w: btnW, h: btnH, fileNum: num, state: state});
 
         const isHov = mouseX >= bx && mouseX <= bx + btnW && mouseY >= by && mouseY <= by + btnH;
