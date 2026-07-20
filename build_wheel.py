@@ -33,6 +33,7 @@ PACKAGE_FILES = [
     "gcode_parser.py",
     "thermal_plotter.py",
     "template.html",
+    "CHANGELOG.md",
 ]
 
 
@@ -43,7 +44,14 @@ def sha256_digest(data: bytes) -> str:
 
 
 def build_metadata() -> str:
-    return (
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    readme_path = os.path.join(repo_root, "README.md")
+    long_desc = ""
+    if os.path.exists(readme_path):
+        with open(readme_path, "r", encoding="utf-8") as f:
+            long_desc = f.read()
+
+    header = (
         f"Metadata-Version: 2.4\n"
         f"Name: {DISPLAY_NAME}\n"
         f"Version: {VERSION}\n"
@@ -51,7 +59,11 @@ def build_metadata() -> str:
         f"Author: {AUTHOR}\n"
         f"Import-Name: {IMPORT_NAME}\n"
         f"Requires-Python: >=3.12\n"
+        f"Description-Content-Type: text/markdown\n"
     )
+    if long_desc:
+        header += f"\n{long_desc}\n"
+    return header
 
 
 def build_wheel_info() -> str:
