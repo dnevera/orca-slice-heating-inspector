@@ -51,16 +51,17 @@ def _build_file_picker_html():
   }
   h1 { font-size: 1.4em; margin-bottom: 8px; color: #f5c2e7; }
   p { font-size: 0.9em; color: #a6adc8; margin-bottom: 24px; }
-  .drop-zone {
-    border: 2px dashed #585b70; border-radius: 12px;
+  .pick-btn {
+    border: 2px solid #585b70; border-radius: 12px;
     padding: 40px 20px; margin-bottom: 16px;
     transition: all 0.2s ease; cursor: pointer;
+    background: transparent;
   }
-  .drop-zone:hover, .drop-zone.drag-over {
+  .pick-btn:hover {
     border-color: #89b4fa; background: rgba(137,180,250,0.08);
   }
-  .drop-zone .icon { font-size: 2.5em; margin-bottom: 12px; }
-  .drop-zone .label { font-size: 0.95em; color: #bac2de; }
+  .pick-btn .icon { font-size: 2.5em; margin-bottom: 12px; }
+  .pick-btn .label { font-size: 0.95em; color: #bac2de; }
   input[type=file] { display: none; }
   .status { font-size: 0.85em; color: #a6adc8; min-height: 1.5em; }
   .status.error { color: #f38ba8; }
@@ -69,31 +70,20 @@ def _build_file_picker_html():
 <div class="container">
   <h1>🌡 Slice Heating Inspector</h1>
   <p>Select a G-code or 3MF file to analyze temperature profiles</p>
-  <div class="drop-zone" id="dropZone" onclick="fileInput.click()">
+  <div class="pick-btn" onclick="fileInput.click()">
     <div class="icon">📂</div>
-    <div class="label">Click to browse or drag & drop<br>
+    <div class="label">Click to select file<br>
     <small>.gcode &nbsp;|&nbsp; .3mf</small></div>
   </div>
   <input type="file" id="fileInput" accept=".gcode,.3mf">
   <div class="status" id="status"></div>
 </div>
 <script>
-const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const status = document.getElementById('status');
 
 fileInput.addEventListener('change', e => {
   const file = e.target.files[0];
-  if (file) handleFile(file);
-});
-
-dropZone.addEventListener('dragover', e => {
-  e.preventDefault(); dropZone.classList.add('drag-over');
-});
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
   if (file) handleFile(file);
 });
 

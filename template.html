@@ -123,10 +123,8 @@ function shortName(name, maxLen) {
     return stem.slice(0, avail) + "..." + ext;
 }
 if (data.is_comparison) {
-    const s1 = data.file1.slicer || "Slicer";
-    const s2 = data.file2.slicer || "Slicer";
-    titleEl.innerText = "1. " + s1 + ": " + shortName(data.file1.filename, 28) + "\n2. " + s2 + ": " + shortName(data.file2.filename, 28);
-    titleEl.title = "1. " + data.file1.filename + "\n2. " + data.file2.filename;
+    titleEl.innerText = shortName(data.file1.filename, 30) + "\nvs " + shortName(data.file2.filename, 30);
+    titleEl.title = data.file1.filename + "\nvs\n" + data.file2.filename;
     titleEl.classList.add("multiline");
 } else {
     titleEl.innerText = shortName(data.file1.filename, 30);
