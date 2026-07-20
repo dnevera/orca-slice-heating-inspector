@@ -40,6 +40,12 @@
         .slice-meta .sep { color: #52525b; margin: 0 2px; }
         .slice-meta .flush-on { color: #4ade80; font-weight: bold; }
         .slice-meta .flush-off { color: #ef4444; }
+        .slice-time {
+            white-space: nowrap; color: #71717a;
+        }
+        .slice-time .t-val { color: #a1a1aa; }
+        .slice-time .t-print { color: #e4e4e7; font-weight: 600; }
+        .slice-time .t-dot { color: #52525b; margin: 0 3px; }
         .slice-dyn {
             flex: 1; color: #a1a1aa; white-space: nowrap;
             overflow: hidden; text-overflow: ellipsis;
@@ -192,12 +198,18 @@ function buildSliceRow(fd, fileNum, src) {
     }
     if (vals.length) m.push(SEP + vals.join(SEP));
     var metaHTML = '<div class="slice-meta">' + m.join(' ') + '</div>';
-    // — Dynamic (right, one line, updated on hover) —
+    // — Time column (separate, always visible) —
     var totalT = formatTime(fd.total_duration);
     var printT = formatTime(fd.end_gcode_time || fd.total_duration);
-    var initText = fd.slicer + ' ' + totalT + '/' + printT;
+    var timeHTML = '<div class="slice-time">'
+        + '<span class="t-val">' + totalT + '</span> <span>total</span>'
+        + '<span class="t-dot">·</span>'
+        + '<span class="t-print">' + printT + '</span> <span>print</span>'
+        + '</div>';
+    // — Dynamic (right, one line, updated on hover) —
+    var initText = fd.slicer;
     var dynHTML = '<div class="slice-dyn" id="dyn-' + fileNum + '">' + initText + '</div>';
-    return '<div class="slice-row">' + metaHTML + dynHTML + '</div>';
+    return '<div class="slice-row">' + metaHTML + timeHTML + dynHTML + '</div>';
 }
 var rowsHTML = buildSliceRow(data.file1, 1, data.file1_source);
 if (data.is_comparison && data.file2) {
@@ -996,9 +1008,7 @@ function updateInfoPanel(timeNum) {
         const htr = getHeater(fd, st.active);
         const eId = getExtIdForHeater(fd, htr);
         const eLbl = getExtLabel(fd, eId);
-        const totalT = formatTime(fd.total_duration);
-        const printT = formatTime(fd.end_gcode_time || fd.total_duration);
-        dynEl.innerText = fd.slicer + " " + totalT + "/" + printT + "  T0=" + st.t0 + "° T1=" + st.t1 + "°  " + eLbl + " " + fmtTool(st.active) + ": " + fType;
+        dynEl.innerText = fd.slicer + "  T0=" + st.t0 + "° T1=" + st.t1 + "°  " + eLbl + " " + fmtTool(st.active) + ": " + fType;
         dynEl.style.color = "#e4e4e7";
     });
 }
