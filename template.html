@@ -553,7 +553,21 @@ function draw() {
         });
     });
 
-    drawLegend(visibleWidth);
+    // Compute active filament per file for legend highlighting
+    const activeFilaments = new Map(); // fd -> active fid
+    const last = panels[panels.length - 1];
+    const lastBottom = last ? last.yStart + last.height : height;
+    if (mouseX >= marginLeft && mouseX <= marginLeft + visibleWidth && mouseY >= topYStart && mouseY <= lastBottom) {
+        const timeNum = ((mouseX - marginLeft + offsetX) / plotW) * data.total_duration;
+        [data.file1, data.file2].forEach(fd => {
+            if (!fd) return;
+            const st = getClosestState(fd.track, timeNum);
+            let fIdx = st.active; if (fIdx >= 1000) fIdx -= 1000;
+            activeFilaments.set(fd, fIdx);
+        });
+    }
+
+    drawLegend(visibleWidth, activeFilaments);
     drawPinButtons();
     drawTooltips(scaleX, scaleY, visibleWidth, plotW);
 }
@@ -758,7 +772,7 @@ function getClosestState(track, timeVal) {
 
 function fmtTool(t) { return "T" + (t >= 1000 ? t - 1000 : t); }
 
-function drawLegend(visibleWidth) {
+function drawLegend(visibleWidth, activeFilaments) {
     const lx = marginLeft + visibleWidth + 20;
     ctx.fillStyle = "#f4f4f5"; ctx.font = "bold 14px system-ui"; ctx.textAlign = "left";
     ctx.fillText("Legend", lx, topYStart + 15);
@@ -777,15 +791,20 @@ function drawLegend(visibleWidth) {
         ctx.fillText("T-changes: " + toolchangesCount + " | H2C: " + nozzleChangesCount, lx, y); y += 13;
         ctx.fillText("Preheats: " + preheatsCount + " | Cools: " + cooldownsCount, lx, y); y += 16;
         
+        const activeFid = activeFilaments ? activeFilaments.get(fd) : undefined;
         ctx.font = "11px system-ui";
         Object.keys(fd.filaments).forEach(fid => {
             const fil = fd.filaments[fid];
+            const isActive = activeFid !== undefined && parseInt(fid) === activeFid;
             let dc = fil.color; if (dc.toUpperCase() === "#FFFFFF") dc = "#e4e4e7";
-            const heater = getHeater(fd, parseInt(fid));
-            const extId = getExtIdForHeater(fd, heater);
-            const extLbl = getExtLabel(fd, extId);
+            // Highlight background for active filament
+            if (isActive) {
+                ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+                ctx.fillRect(lx - 4, y - 11, marginRight - 28, 15);
+            }
             ctx.fillStyle = dc; ctx.fillRect(lx, y-8, 10, 8);
-            ctx.fillStyle = "#a1a1aa"; ctx.font = "11px system-ui";
+            ctx.fillStyle = isActive ? "#f4f4f5" : "#a1a1aa";
+            ctx.font = isActive ? "bold 11px system-ui" : "11px system-ui";
             ctx.fillText(fmtTool(fid) + ": " + fil.type + " (" + fil.color.toUpperCase() + ")", lx+16, y);
             y += 15;
         });
