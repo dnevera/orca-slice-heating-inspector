@@ -29,17 +29,21 @@
             font-family: monospace; white-space: pre-line; line-height: 1.3;
         }
         #instructions { font-size: 11px; color: #71717a; text-align: right; line-height: 1.3; }
-        #compare-btn {
+        .action-btns {
             position: fixed; bottom: 16px; right: 16px; z-index: 100;
+            display: flex; gap: 8px;
+        }
+        .action-btn {
             background: #3f3f46; color: #e4e4e7; border: 1px solid #52525b;
             padding: 8px 16px; border-radius: 8px; font-size: 12px;
             cursor: pointer; white-space: nowrap;
             transition: all 0.15s ease;
             box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
-        #compare-btn:hover { background: #52525b; border-color: #71717a; }
-        #compare-btn:active { background: #27272a; }
-        #compare-btn.loading { opacity: 0.5; pointer-events: none; }
+        .action-btn:hover { background: #52525b; border-color: #71717a; }
+        .action-btn:active { background: #27272a; }
+        .action-btn.loading { opacity: 0.5; pointer-events: none; }
+        .action-btn.pinned { background: #166534; border-color: #22c55e; color: #bbf7d0; }
         #canvas-container { width: 100vw; height: calc(100vh - 75px); position: relative; }
         canvas { display: block; width: 100%; height: 100%; }
     </style>
@@ -51,7 +55,11 @@
         <div id="instructions">Scroll: Zoom | Drag: Pan | Double-Click: Reset</div>
     </div>
     <div id="canvas-container"><canvas id="plotCanvas"></canvas></div>
-    <button id="compare-btn" onclick="compareFileInput.click()">📊 Compare</button>
+    <div class="action-btns">
+        <button class="action-btn" id="dashboard-btn" onclick="goToDashboard()">← Dashboard</button>
+        <button class="action-btn" id="pin-btn" onclick="pinBaseline()">📌 Pin as Baseline</button>
+        <button class="action-btn" id="compare-btn" onclick="compareFileInput.click()">📊 Compare</button>
+    </div>
     <input type="file" id="compareFileInput" accept=".gcode,.3mf" style="display:none">
 <script>
 const data = %DATA_JSON%;
@@ -946,6 +954,40 @@ compareFileInput.addEventListener('change', function(e) {
     // Reset input so the same file can be re-selected
     compareFileInput.value = '';
 });
+
+// ── Dashboard & Pin Baseline ──
+function goToDashboard() {
+    if (window.orca) window.orca.postMessage({command: 'go_dashboard'});
+}
+function pinBaseline() {
+    if (window.orca) window.orca.postMessage({command: 'pin_baseline'});
+}
+
+// ── Python → JS message handler ──
+if (window.orca) {
+    window.orca.onMessage(function(msg) {
+        if (msg.command === 'navigate') {
+            document.open(); document.write(msg.html); document.close();
+            return;
+        }
+        // Pipeline finished slicing → ask Python to reopen plotter with fresh data
+        if (msg.command === 'slice_ready') {
+            window.orca.postMessage({command: 'analyze_current'});
+            return;
+        }
+        if (msg.command === 'baseline_pinned') {
+            var pinBtn = document.getElementById('pin-btn');
+            if (pinBtn) {
+                pinBtn.textContent = '✅ Pinned!';
+                pinBtn.classList.add('pinned');
+                setTimeout(function() {
+                    pinBtn.textContent = '📌 Pin as Baseline';
+                    pinBtn.classList.remove('pinned');
+                }, 2000);
+            }
+        }
+    });
+}
 </script>
 </body>
 </html>

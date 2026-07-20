@@ -585,13 +585,68 @@ def parse_file_data(filepath):
         return None
 
 
+def _extract_gcode_metadata(gcode_path):
+    """Extract filament_map, filament_colour, filament_type from G-code comments.
+
+    OrcaSlicer writes config as comments near the top of G-code files:
+        ; filament_colour = #C1C1C1;#0078BF;#951E23;#000000  (separator: ;)
+        ; filament_map = 2,1,2,2                               (separator: ,)
+        ; filament_type = PLA;PLA;PLA-CF;PLA                   (separator: ;)
+
+    Config lines are typically in the first 500 lines of the file.
+
+    Returns: dict with keys 'filament_maps', 'filament_colour', 'filament_type'
+             (only present if found in G-code).
+    """
+    meta = {}
+    try:
+        with open(gcode_path, 'r', encoding='utf-8', errors='replace') as f:
+            all_lines = f.readlines()
+    except Exception:
+        return meta
+
+    # Search first 500 lines + last 500 lines (covers all slicer layouts)
+    search_lines = all_lines[:500]
+    if len(all_lines) > 500:
+        search_lines += all_lines[-500:]
+
+    key_map = {
+        "filament_map": "filament_maps",
+        "filament_colour": "filament_colour",
+        "filament_color": "filament_colour",
+        "filament_type": "filament_type",
+    }
+    for line in search_lines:
+        stripped = line.strip()
+        if not stripped.startswith(";"):
+            continue
+        # Format: "; key = value" or ";key = value"
+        content = stripped.lstrip("; ")
+        if "=" not in content:
+            continue
+        key_part, _, val_part = content.partition("=")
+        key = key_part.strip()
+        val = val_part.strip()
+        if key in key_map and val:
+            # filament_map uses comma separator — normalize to semicolon
+            if key == "filament_map":
+                val = val.replace(",", ";")
+            meta[key_map[key]] = val
+
+    return meta
+
+
 def parse_file_data_from_gcode(gcode_path, config=None):
     """Parse a raw .gcode file with optional config dict for metadata.
 
+    Metadata (filament_map, filament_colour, filament_type) is extracted
+    directly from G-code comments. The external `config` dict, if provided,
+    overrides values found in G-code (backward compat with ctx.config_value).
+
     Args:
         gcode_path: path to the .gcode file
-        config: dict with keys like 'filament_maps', 'filament_colour',
-                'filament_type'. Typically from ctx.config_value() in OrcaSlicer plugin.
+        config: optional override dict with keys like 'filament_maps',
+                'filament_colour', 'filament_type'.
 
     Returns: data dict compatible with HTML_TEMPLATE, or None on error.
     """
@@ -602,25 +657,37 @@ def parse_file_data_from_gcode(gcode_path, config=None):
         config = {}
 
     try:
-        # Get filament_maps from config
-        filament_maps_str = config.get("filament_maps", "1 1 1 1 1 2")
+        # Extract metadata from G-code comments (self-contained)
+        gcode_meta = _extract_gcode_metadata(gcode_path)
+
+        # Merge: external config overrides gcode_meta (if non-empty)
+        effective = dict(gcode_meta)
+        for k, v in config.items():
+            if v:  # only override if value is non-empty
+                effective[k] = v
+
+        # Get filament_maps — opt_serialize uses ";" separator,
+        # 3MF slice_info.config uses space separator, handle both
+        filament_maps_str = effective.get("filament_maps", "1 1 1 1 1 2")
         if isinstance(filament_maps_str, list):
             filament_maps_str = " ".join(str(x) for x in filament_maps_str)
+        else:
+            filament_maps_str = str(filament_maps_str).replace(";", " ")
 
         # Parse G-code
         _, total_lines, _, stats = parse_critical_gcode_from_file(gcode_path, filament_maps_str)
         track_raw = stats["temp_track"]
         m73_points = stats.get("m73_points", [])
 
-        # Build filaments from config
+        # Build filaments from effective config
         filaments = {}
-        colours = config.get("filament_colour", [])
-        types = config.get("filament_type", [])
+        colours = effective.get("filament_colour", [])
+        types = effective.get("filament_type", [])
         if isinstance(colours, str):
             colours = colours.split(";")
         if isinstance(types, str):
             types = types.split(";")
-        for i in range(max(len(colours), len(types))):
+        for i in range(max(len(colours), len(types), 1)):
             filaments[i] = {
                 "color": colours[i] if i < len(colours) else "#FFFFFF",
                 "type": types[i] if i < len(types) else "PLA"

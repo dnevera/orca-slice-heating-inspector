@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1e1e2e; color: #cdd6f4;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+  }
+  .container {
+    text-align: center; padding: 40px;
+    background: #313244; border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    max-width: 520px; width: 90%;
+  }
+  h1 { font-size: 1.4em; margin-bottom: 8px; color: #f5c2e7; }
+  .subtitle { font-size: 0.9em; color: #a6adc8; margin-bottom: 24px; }
+  .section-label {
+    font-size: 0.75em; color: #6c7086; text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 8px; text-align: left;
+  }
+  select {
+    width: 100%; padding: 12px 16px; border-radius: 8px;
+    background: #45475a; color: #cdd6f4; border: 1px solid #585b70;
+    font-size: 0.95em; margin-bottom: 16px; cursor: pointer; outline: none;
+  }
+  select:focus { border-color: #89b4fa; }
+  .pick-area {
+    border: 2px dashed #585b70; border-radius: 12px;
+    padding: 30px 20px; margin-bottom: 16px;
+    transition: all 0.2s ease; cursor: pointer;
+  }
+  .pick-area:hover { border-color: #89b4fa; background: rgba(137,180,250,0.08); }
+  .pick-area .icon { font-size: 2em; margin-bottom: 8px; }
+  .pick-area .label { font-size: 0.9em; color: #bac2de; }
+  .pick-area.hidden { display: none; }
+  input[type=file] { display: none; }
+  .divider { border-top: 1px solid #45475a; margin: 20px 0; }
+  .baseline-box {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; padding: 12px; background: #45475a; border-radius: 8px;
+  }
+  .baseline-box.empty { background: transparent; border: 1px dashed #45475a; }
+  .bl-label { font-size: 0.85em; color: #a6adc8; }
+  .bl-name {
+    font-size: 0.85em; color: #f5c2e7; font-weight: 600;
+    max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bl-clear {
+    background: none; border: none; color: #f38ba8; cursor: pointer;
+    font-size: 1em; padding: 2px 6px; border-radius: 4px;
+  }
+  .bl-clear:hover { background: rgba(243,139,168,0.15); }
+  .status { font-size: 0.85em; color: #a6adc8; min-height: 1.5em; margin-top: 12px; }
+  .status.error { color: #f38ba8; }
+</style>
+</head><body>
+<div class="container">
+  <h1>🌡 Slice Heating Inspector</h1>
+  <p class="subtitle">Analyze temperature profiles from G-code</p>
+
+  <div class="section-label">Base Slice Source</div>
+  <select id="sourceSelect" onchange="onSourceChange()">
+    <option value="file">📂 Load from file</option>
+    %CURRENT_OPTION%
+  </select>
+
+  <div id="filePickArea" class="pick-area" onclick="document.getElementById('fileInput').click()">
+    <div class="icon">📂</div>
+    <div class="label">Click to select .gcode or .3mf file</div>
+  </div>
+  <input type="file" id="fileInput" accept=".gcode,.3mf">
+
+  <div class="divider"></div>
+  <div class="section-label">Baseline</div>
+  %BASELINE_SECTION%
+
+  <div class="status" id="status"></div>
+</div>
+<script>
+var fileInput = document.getElementById('fileInput');
+var statusEl = document.getElementById('status');
+var sourceSelect = document.getElementById('sourceSelect');
+var filePickArea = document.getElementById('filePickArea');
+
+function onSourceChange() {
+    if (sourceSelect.value === 'file') {
+        filePickArea.classList.remove('hidden');
+    } else {
+        filePickArea.classList.add('hidden');
+        statusEl.textContent = 'Loading current slice...';
+        statusEl.className = 'status';
+        if (window.orca) window.orca.postMessage({command: 'analyze_current'});
+    }
+}
+
+fileInput.addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var name = file.name.toLowerCase();
+    if (!name.endsWith('.gcode') && !name.endsWith('.3mf')) {
+        statusEl.textContent = 'Unsupported file type. Use .gcode or .3mf';
+        statusEl.className = 'status error';
+        return;
+    }
+    statusEl.textContent = 'Reading: ' + file.name + '...';
+    statusEl.className = 'status';
+
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+        var bytes = new Uint8Array(ev.target.result);
+        var binary = '';
+        var chunkSize = 8192;
+        for (var i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+        }
+        var b64 = btoa(binary);
+        statusEl.textContent = 'Analyzing: ' + file.name + '...';
+        if (window.orca) {
+            window.orca.postMessage({command: 'analyze', name: file.name, data_b64: b64});
+        }
+    };
+    reader.onerror = function() {
+        statusEl.textContent = 'Failed to read file';
+        statusEl.className = 'status error';
+    };
+    reader.readAsArrayBuffer(file);
+    fileInput.value = '';
+});
+
+function clearBaseline() {
+    if (window.orca) window.orca.postMessage({command: 'clear_baseline'});
+}
+
+// ── Python → JS message handler ──
+if (window.orca) {
+    window.orca.onMessage(function(msg) {
+        if (msg.command === 'navigate') {
+            document.open(); document.write(msg.html); document.close();
+            return;
+        }
+        // Pipeline finished slicing → ask Python to open plotter (on UI thread)
+        if (msg.command === 'slice_ready') {
+            window.orca.postMessage({command: 'analyze_current'});
+            return;
+        }
+        if (msg.command === 'error') {
+            statusEl.textContent = msg.message;
+            statusEl.className = 'status error';
+        }
+        if (msg.command === 'status') {
+            statusEl.textContent = msg.message;
+            statusEl.className = 'status';
+        }
+    });
+}
+</script>
+</body></html>

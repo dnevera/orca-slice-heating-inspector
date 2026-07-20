@@ -20,7 +20,7 @@ import zipfile
 
 DISPLAY_NAME = "Slice Heating Inspector"
 IMPORT_NAME = "orca_slice_heating_inspector"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 SUMMARY = (
     "Interactive temperature timeline visualization for H2C multi-nozzle G-code. "
     "Analyzes preheat/cooldown events, toolchanges, and nozzle assignments."
@@ -32,6 +32,8 @@ PACKAGE_FILES = [
     "orca_slice_heating_inspector.py",  # entry point → __init__.py
     "gcode_parser.py",
     "thermal_plotter.py",
+    "shared_state.py",
+    "dashboard.html",
     "template.html",
     "CHANGELOG.md",
 ]
