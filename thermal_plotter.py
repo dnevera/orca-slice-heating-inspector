@@ -558,6 +558,56 @@ def parse_file_data(filepath):
 
         cooldown_count = sum(1 for ev in raw_preheats if ev.get("cooldown_temp") is not None)
 
+        # ── Extract slice_info from gcode comments inside 3MF ──
+        slice_info = {}
+        if raw_gcode_lines:
+            import re as _re
+            slice_key_map = {
+                "printer_model": "printer",
+                "nozzle_diameter": "nozzle_dia",
+                "nozzle_type": "nozzle_type",
+                "print_sequence": "print_sequence",
+                "wipe_tower_type": "wipe_type",
+                "wipe_tower_wall_type": "wipe_wall",
+                "flush_into_infill": "flush_infill",
+                "flush_into_support": "flush_support",
+                "flush_into_objects": "flush_objects",
+                "flush_multiplier": "flush_multiplier",
+            }
+            object_names = set()
+            obj_re = _re.compile(r'^; printing object (.+?) id:\d+')
+            # Search first 500 + last 500 lines
+            search_lines = raw_gcode_lines[:500]
+            if len(raw_gcode_lines) > 500:
+                search_lines = search_lines + raw_gcode_lines[-500:]
+            for gl in search_lines:
+                stripped = gl.strip()
+                if not stripped.startswith(";"):
+                    continue
+                content = stripped.lstrip("; ")
+                if content.startswith("total layer number:"):
+                    try:
+                        slice_info["layers"] = int(content.split(":", 1)[1].strip())
+                    except (ValueError, IndexError):
+                        pass
+                    continue
+                if "=" not in content:
+                    continue
+                key_part, _, val_part = content.partition("=")
+                key = key_part.strip()
+                val = val_part.strip()
+                if key in slice_key_map and val:
+                    slice_info[slice_key_map[key]] = val
+            # Object names
+            for gl in raw_gcode_lines[:2000]:
+                m = obj_re.match(gl.strip())
+                if m:
+                    object_names.add(m.group(1).strip())
+                if len(object_names) >= 10:
+                    break
+            if object_names:
+                slice_info["objects"] = sorted(object_names)
+
         return {
             "filename": os.path.basename(filepath),
             "slicer": slicer_name,
@@ -577,6 +627,7 @@ def parse_file_data(filepath):
             "wipe_zones": wipe_zones,
             "toolchange_zones": toolchange_zones,
             "track": track,
+            "slice_info": slice_info,
         }
     except Exception as e:
         import traceback
@@ -586,19 +637,17 @@ def parse_file_data(filepath):
 
 
 def _extract_gcode_metadata(gcode_path):
-    """Extract filament_map, filament_colour, filament_type from G-code comments.
+    """Extract filament and slice metadata from G-code comments.
 
-    OrcaSlicer writes config as comments near the top of G-code files:
-        ; filament_colour = #C1C1C1;#0078BF;#951E23;#000000  (separator: ;)
-        ; filament_map = 2,1,2,2                               (separator: ,)
-        ; filament_type = PLA;PLA;PLA-CF;PLA                   (separator: ;)
+    OrcaSlicer writes config as comments near the top and end of G-code files.
+    Also extracts header block info (layer count, slicer version) and
+    object names from '; printing object <name>' markers.
 
-    Config lines are typically in the first 500 lines of the file.
-
-    Returns: dict with keys 'filament_maps', 'filament_colour', 'filament_type'
-             (only present if found in G-code).
+    Returns: dict with filament keys + 'slice_info' sub-dict.
     """
     meta = {}
+    slice_info = {}
+    object_names = set()
     try:
         with open(gcode_path, 'r', encoding='utf-8', errors='replace') as f:
             all_lines = f.readlines()
@@ -610,29 +659,71 @@ def _extract_gcode_metadata(gcode_path):
     if len(all_lines) > 500:
         search_lines += all_lines[-500:]
 
-    key_map = {
+    # ── Filament keys (existing) ──
+    filament_key_map = {
         "filament_map": "filament_maps",
         "filament_colour": "filament_colour",
         "filament_color": "filament_colour",
         "filament_type": "filament_type",
     }
+
+    # ── Slice info keys (new) ──
+    slice_key_map = {
+        "printer_model": "printer",
+        "nozzle_diameter": "nozzle_dia",
+        "nozzle_type": "nozzle_type",
+        "print_sequence": "print_sequence",
+        "wipe_tower_type": "wipe_type",
+        "wipe_tower_wall_type": "wipe_wall",
+        "flush_into_infill": "flush_infill",
+        "flush_into_support": "flush_support",
+        "flush_into_objects": "flush_objects",
+        "flush_multiplier": "flush_multiplier",
+    }
+
     for line in search_lines:
         stripped = line.strip()
         if not stripped.startswith(";"):
             continue
-        # Format: "; key = value" or ";key = value"
+
         content = stripped.lstrip("; ")
+
+        # Header block: "; total layer number: 134"
+        if content.startswith("total layer number:"):
+            try:
+                slice_info["layers"] = int(content.split(":", 1)[1].strip())
+            except (ValueError, IndexError):
+                pass
+            continue
+
         if "=" not in content:
             continue
+
         key_part, _, val_part = content.partition("=")
         key = key_part.strip()
         val = val_part.strip()
-        if key in key_map and val:
-            # filament_map uses comma separator — normalize to semicolon
+
+        if key in filament_key_map and val:
             if key == "filament_map":
                 val = val.replace(",", ";")
-            meta[key_map[key]] = val
+            meta[filament_key_map[key]] = val
+        elif key in slice_key_map and val:
+            slice_info[slice_key_map[key]] = val
 
+    # ── Object names from '; printing object <name> id:<N>' ──
+    import re as _re
+    obj_re = _re.compile(r'^; printing object (.+?) id:\d+')
+    for line in all_lines[:2000]:  # Objects appear in first layers
+        m = obj_re.match(line.strip())
+        if m:
+            object_names.add(m.group(1).strip())
+        if len(object_names) >= 10:  # cap
+            break
+
+    if object_names:
+        slice_info["objects"] = sorted(object_names)
+
+    meta["slice_info"] = slice_info
     return meta
 
 
@@ -912,6 +1003,7 @@ def parse_file_data_from_gcode(gcode_path, config=None):
             "wipe_zones": wipe_zones,
             "toolchange_zones": toolchange_zones,
             "track": track,
+            "slice_info": effective.get("slice_info", {}),
         }
     except Exception as e:
         import traceback
@@ -924,12 +1016,14 @@ def parse_file_data_from_gcode(gcode_path, config=None):
 parse_file_data_from_3mf = parse_file_data
 
 
-def generate_html(f1_data, f2_data=None):
+def generate_html(f1_data, f2_data=None, f1_source="file", f2_source="file"):
     """Generate HTML string from parsed data dict(s).
 
     Args:
         f1_data: primary file data dict (from parse_file_data or parse_file_data_from_gcode)
         f2_data: optional comparison file data dict
+        f1_source: source label for file1 ("current", "pinned", "file")
+        f2_source: source label for file2 ("current", "pinned", "compare", "file")
 
     Returns: HTML string ready for rendering
     """
@@ -937,6 +1031,8 @@ def generate_html(f1_data, f2_data=None):
         "is_comparison": f2_data is not None,
         "file1": f1_data,
         "file2": f2_data,
+        "file1_source": f1_source,
+        "file2_source": f2_source,
         "total_duration": max(f1_data["total_duration"], f2_data["total_duration"]) if f2_data else f1_data["total_duration"],
     }
     return _load_html_template().replace("%DATA_JSON%", json.dumps(js_data))

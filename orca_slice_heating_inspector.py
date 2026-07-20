@@ -69,11 +69,13 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
             self._current_name = cur_name
             bl_data, bl_name = shared_state.state.get_baseline()
             if bl_data:
-                html = generate_html(cur_data, bl_data)
-                title = f"Slice Heating Inspector — {cur_name} vs 📌 {bl_name}"
+                html = generate_html(cur_data, bl_data,
+                                     f1_source=self._get_f1_source(),
+                                     f2_source="pinned")
+                title = f"Slice Heating Inspector — {cur_name}"
                 self._create_window(html, title=title, width=1400, height=800)
             else:
-                html = generate_html(cur_data)
+                html = generate_html(cur_data, f1_source=self._get_f1_source())
                 self._create_window(html, title=f"Slice Heating Inspector — {cur_name}")
         else:
             self._create_window(self._build_dashboard_html())
@@ -126,15 +128,19 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
                 # Priority: baseline > compare file > single view
                 bl_data, bl_name = shared_state.state.get_baseline()
                 if bl_data:
-                    html = generate_html(cur_data, bl_data)
-                    title = f"Slice Heating Inspector — {cur_name} vs 📌 {bl_name}"
+                    html = generate_html(cur_data, bl_data,
+                                         f1_source=self._get_f1_source(),
+                                         f2_source="pinned")
+                    title = f"Slice Heating Inspector — {cur_name}"
                     self._open_html(html, title=title, width=1400, height=900)
                 elif self._compare_data:
-                    html = generate_html(cur_data, self._compare_data)
-                    title = f"Slice Heating Inspector — {cur_name} vs {self._compare_name}"
+                    html = generate_html(cur_data, self._compare_data,
+                                         f1_source=self._get_f1_source(),
+                                         f2_source="compare")
+                    title = f"Slice Heating Inspector — {cur_name}"
                     self._open_html(html, title=title, width=1400, height=900)
                 else:
-                    html = generate_html(cur_data)
+                    html = generate_html(cur_data, f1_source=self._get_f1_source())
                     self._open_html(html, title=f"Slice Heating Inspector — {cur_name}")
             else:
                 self._post({"command": "error",
@@ -197,6 +203,17 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
         if self._window and self._window.is_open():
             self._window.close()
         self._create_window(html, title, width, height)
+
+    def _get_f1_source(self):
+        """Determine source label for file1 (current slice).
+
+        Returns 'current_pinned' if this slice is also the pinned baseline,
+        otherwise 'current'.
+        """
+        st = shared_state.state
+        if st.has_baseline and st.baseline_name == self._current_name:
+            return "current_pinned"
+        return "current"
 
     def _pin_button_html(self):
         """Render pin button HTML reflecting current baseline state."""
