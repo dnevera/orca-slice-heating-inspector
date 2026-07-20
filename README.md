@@ -7,11 +7,11 @@ Canvas-based zoom/pan/hover inspector with side-by-side comparison and baseline 
 
 ## Screenshots
 
-### Comparison Mode — BambuStudio vs OrcaSlicer
-![Comparison Mode](rc/comparing.png)
+### Dashboard
+![Dashboard](rc/dashboard.png)
 
-### File Picker
-![File Picker](rc/open_slicing_file.png)
+### Comparison Mode — Legend Highlighting & Pinning
+![Comparison Mode](rc/comparing.png)
 
 ## Features
 
