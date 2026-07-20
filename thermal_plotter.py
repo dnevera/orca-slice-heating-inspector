@@ -537,9 +537,17 @@ def parse_file_data(filepath):
         toolchange_zones = [zone_to_time(s, e) for s, e in toolchange_zones_raw]
 
 
-        slicer_name = "OrcaSlicer" if "orca" in os.path.basename(filepath).lower() else (
-            "BambuStudio" if "bbl" in os.path.basename(filepath).lower() else "Slicer"
-        )
+        # Detect slicer from G-code comments (not from filename — may be a temp file)
+        slicer_name = "Slicer"
+        if raw_gcode_lines:
+            for gl in raw_gcode_lines[:50]:  # Check first 50 lines for slicer signature
+                gl_lower = gl.lower()
+                if "orcaslicer" in gl_lower:
+                    slicer_name = "OrcaSlicer"
+                    break
+                elif "bambustudio" in gl_lower or "bambu studio" in gl_lower:
+                    slicer_name = "BambuStudio"
+                    break
 
         print(f"  Extruder groups: {extruder_groups}")
         print(f"  Heater→Extruder: {heater_to_ext}")

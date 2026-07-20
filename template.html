@@ -15,17 +15,27 @@
             display: flex; align-items: center; justify-content: space-between;
             border-bottom: 1px solid #3f3f46; height: 50px;
         }
-        #title { font-size: 15px; font-weight: bold; max-width: 250px; line-height: 1.2; }
+        #title {
+            font-size: 13px; font-weight: bold; max-width: 220px; line-height: 1.3;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            cursor: default;
+        }
+        #title.multiline {
+            white-space: normal; display: -webkit-box;
+            -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+        }
         #info-panel {
             font-size: 12px; color: #a1a1aa; flex-grow: 1; margin-left: 20px;
             font-family: monospace; white-space: pre-line; line-height: 1.3;
         }
         #instructions { font-size: 11px; color: #71717a; text-align: right; line-height: 1.3; }
         #compare-btn {
+            position: fixed; bottom: 16px; right: 16px; z-index: 100;
             background: #3f3f46; color: #e4e4e7; border: 1px solid #52525b;
-            padding: 6px 14px; border-radius: 6px; font-size: 12px;
-            cursor: pointer; white-space: nowrap; margin-left: 12px;
+            padding: 8px 16px; border-radius: 8px; font-size: 12px;
+            cursor: pointer; white-space: nowrap;
             transition: all 0.15s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
         #compare-btn:hover { background: #52525b; border-color: #71717a; }
         #compare-btn:active { background: #27272a; }
@@ -38,11 +48,11 @@
     <div id="header">
         <div id="title">Temperature Timeline</div>
         <div id="info-panel">Hover over graph for synchronized temperature comparison</div>
-        <button id="compare-btn" onclick="compareFileInput.click()">📊 Compare</button>
-        <input type="file" id="compareFileInput" accept=".gcode,.3mf" style="display:none">
         <div id="instructions">Scroll: Zoom | Drag: Pan | Double-Click: Reset</div>
     </div>
     <div id="canvas-container"><canvas id="plotCanvas"></canvas></div>
+    <button id="compare-btn" onclick="compareFileInput.click()">📊 Compare</button>
+    <input type="file" id="compareFileInput" accept=".gcode,.3mf" style="display:none">
 <script>
 const data = %DATA_JSON%;
 // Get extruder label: "Ext. N (M fil.)"
@@ -101,10 +111,26 @@ function inWipeZone(fileData, time) {
 }
 
 const titleEl = document.getElementById("title");
+function shortName(name, maxLen) {
+    if (!name) return "";
+    if (name.length <= maxLen) return name;
+    // Keep extension visible
+    const dotIdx = name.lastIndexOf('.');
+    const ext = dotIdx > 0 ? name.slice(dotIdx) : "";
+    const stem = dotIdx > 0 ? name.slice(0, dotIdx) : name;
+    const avail = maxLen - ext.length - 3; // 3 for "..."
+    if (avail < 5) return name.slice(0, maxLen - 3) + "...";
+    return stem.slice(0, avail) + "..." + ext;
+}
 if (data.is_comparison) {
-    titleEl.innerText = "Comparison:\n1. " + data.file1.filename + "\n2. " + data.file2.filename;
+    const s1 = data.file1.slicer || "Slicer";
+    const s2 = data.file2.slicer || "Slicer";
+    titleEl.innerText = "1. " + s1 + ": " + shortName(data.file1.filename, 28) + "\n2. " + s2 + ": " + shortName(data.file2.filename, 28);
+    titleEl.title = "1. " + data.file1.filename + "\n2. " + data.file2.filename;
+    titleEl.classList.add("multiline");
 } else {
-    titleEl.innerText = "Temperatures:\n" + data.file1.filename;
+    titleEl.innerText = shortName(data.file1.filename, 30);
+    titleEl.title = data.file1.filename;
 }
 
 const canvas = document.getElementById("plotCanvas");

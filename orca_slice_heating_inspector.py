@@ -235,6 +235,9 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
                                        "message": "Failed to parse file"})
                 return
 
+            # Override temp filename with the original user-selected filename
+            f1_data["filename"] = filename
+
             self._f1_data = f1_data
             html = generate_html(f1_data)
 
@@ -297,6 +300,9 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
 
             if not f2_data or not self._f1_data:
                 return
+
+            # Override temp filename with the original user-selected filename
+            f2_data["filename"] = filename
 
             html = generate_html(self._f1_data, f2_data)
 
