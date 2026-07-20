@@ -978,12 +978,11 @@ if (window.orca) {
         if (msg.command === 'baseline_pinned') {
             var pinBtn = document.getElementById('pin-btn');
             if (pinBtn) {
-                pinBtn.textContent = '✅ Pinned!';
+                pinBtn.textContent = '📌 Baseline Set: ' + (msg.name || 'pinned');
                 pinBtn.classList.add('pinned');
-                setTimeout(function() {
-                    pinBtn.textContent = '📌 Pin as Baseline';
-                    pinBtn.classList.remove('pinned');
-                }, 2000);
+                pinBtn.disabled = true;
+                pinBtn.style.opacity = '0.7';
+                pinBtn.style.cursor = 'default';
             }
         }
     });

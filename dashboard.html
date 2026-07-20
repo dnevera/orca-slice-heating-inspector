@@ -63,11 +63,11 @@
 
   <div class="section-label">Base Slice Source</div>
   <select id="sourceSelect" onchange="onSourceChange()">
-    <option value="file">📂 Load from file</option>
     %CURRENT_OPTION%
+    <option value="file">📂 Load from file</option>
   </select>
 
-  <div id="filePickArea" class="pick-area" onclick="document.getElementById('fileInput').click()">
+  <div id="filePickArea" class="pick-area hidden" onclick="document.getElementById('fileInput').click()">
     <div class="icon">📂</div>
     <div class="label">Click to select .gcode or .3mf file</div>
   </div>
@@ -95,6 +95,9 @@ function onSourceChange() {
         if (window.orca) window.orca.postMessage({command: 'analyze_current'});
     }
 }
+
+// Auto-trigger on page load — current slice is default
+onSourceChange();
 
 fileInput.addEventListener('change', function(e) {
     var file = e.target.files[0];

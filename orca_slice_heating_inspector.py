@@ -50,6 +50,8 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
         self._window_gen = 0        # generation counter for on_close safety
         self._current_data = None   # parsed data for currently viewed file
         self._current_name = None   # filename of currently viewed file
+        self._compare_data = None   # parsed comparison file (preserved across re-slices)
+        self._compare_name = None
 
     def get_name(self):
         return "Slice Heating Inspector"
@@ -107,8 +109,19 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
             if cur_data:
                 self._current_data = cur_data
                 self._current_name = cur_name
-                html = generate_html(cur_data)
-                self._open_html(html, title=f"Slice Heating Inspector — {cur_name}")
+                # Priority: baseline > compare file > single view
+                bl_data, bl_name = shared_state.state.get_baseline()
+                if bl_data:
+                    html = generate_html(cur_data, bl_data)
+                    title = f"Slice Heating Inspector — {cur_name} vs 📌 {bl_name}"
+                    self._open_html(html, title=title, width=1400, height=900)
+                elif self._compare_data:
+                    html = generate_html(cur_data, self._compare_data)
+                    title = f"Slice Heating Inspector — {cur_name} vs {self._compare_name}"
+                    self._open_html(html, title=title, width=1400, height=900)
+                else:
+                    html = generate_html(cur_data)
+                    self._open_html(html, title=f"Slice Heating Inspector — {cur_name}")
             else:
                 self._post({"command": "error",
                             "message": "No current slice — slice a project first"})
@@ -274,6 +287,9 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
                 return
 
             f2_data["filename"] = filename
+            # Store comparison data — preserved across re-slices
+            self._compare_data = f2_data
+            self._compare_name = filename
             html = generate_html(self._current_data, f2_data)
             title = f"Slice Heating Inspector — {self._current_name} vs {filename}"
             self._open_html(html, title=title, width=1400, height=900)
