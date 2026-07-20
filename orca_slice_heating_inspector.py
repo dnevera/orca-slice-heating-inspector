@@ -62,8 +62,22 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
             self._navigate_to_dashboard()
             return orca.ExecutionResult.success("Dashboard refreshed")
 
-        self._create_window(self._build_dashboard_html())
-        return orca.ExecutionResult.success("Dashboard opened")
+        # If current slice data exists, go straight to plotter
+        cur_data, cur_name = shared_state.state.get_current()
+        if cur_data:
+            self._current_data = cur_data
+            self._current_name = cur_name
+            bl_data, bl_name = shared_state.state.get_baseline()
+            if bl_data:
+                html = generate_html(cur_data, bl_data)
+                title = f"Slice Heating Inspector — {cur_name} vs 📌 {bl_name}"
+                self._create_window(html, title=title, width=1400, height=800)
+            else:
+                html = generate_html(cur_data)
+                self._create_window(html, title=f"Slice Heating Inspector — {cur_name}")
+        else:
+            self._create_window(self._build_dashboard_html())
+        return orca.ExecutionResult.success("Inspector opened")
 
     def _make_on_close(self, gen):
         """Create a generation-scoped on_close callback.
@@ -160,6 +174,7 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
     def _create_window(self, html, title="Slice Heating Inspector",
                        width=1200, height=800):
         """Create a new window with generation-scoped on_close."""
+        html = html.replace("%PIN_BUTTON%", self._pin_button_html())
         self._window_gen += 1
         self._window = orca.host.ui.create_window(
             html=html,
@@ -182,6 +197,18 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
         if self._window and self._window.is_open():
             self._window.close()
         self._create_window(html, title, width, height)
+
+    def _pin_button_html(self):
+        """Render pin button HTML reflecting current baseline state."""
+        st = shared_state.state
+        if st.has_baseline:
+            bl_name = st.baseline_name or 'pinned'
+            return (
+                f'<button class="action-btn pinned" id="pin-btn"'
+                f' disabled style="opacity:0.7;cursor:default"'
+                f'>\U0001f4cc Baseline Set: {bl_name}</button>'
+            )
+        return '<button class="action-btn" id="pin-btn" onclick="pinBaseline()">\U0001f4cc Pin as Baseline</button>'
 
     def _navigate_to_dashboard(self):
         self._open_html(self._build_dashboard_html())

@@ -96,9 +96,6 @@ function onSourceChange() {
     }
 }
 
-// Auto-trigger on page load — current slice is default
-onSourceChange();
-
 fileInput.addEventListener('change', function(e) {
     var file = e.target.files[0];
     if (!file) return;
