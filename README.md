@@ -3,7 +3,7 @@
 Interactive temperature timeline visualization for multi-nozzle G-code.
 
 Analyzes preheat/cooldown events, toolchanges, nozzle assignments, and thermal profiles.
-Canvas-based zoom/pan/hover inspector with side-by-side comparison support.
+Canvas-based zoom/pan/hover inspector with side-by-side comparison and baseline pinning support.
 
 ## Screenshots
 
@@ -19,6 +19,9 @@ Canvas-based zoom/pan/hover inspector with side-by-side comparison support.
 - **Preheat/Cooldown Detection** — Highlights pre-heating and standby cooldown zones
 - **Toolchange Markers** — Nozzle change / wipe tower / carousel zones visualized
 - **Comparison Mode** — Compare current OrcaSlicer slice with an external 3MF (e.g., BambuStudio)
+- **Baseline Pinning** — Pin any slice as baseline for persistent comparison (📌 BASE / 📌 Pin)
+- **Legend Highlighting** — Active filament highlighted in legend on cursor hover
+- **Time Column** — Separate header column: total time and print time with clear labels
 - **Vortek Nozzle Tracks** — Mini panels showing individual nozzle thermal activity
 - **Zoom/Pan/Hover** — Scroll to zoom, drag to pan, hover for synchronized tooltip
 - **Slicer Detection** — Automatically identifies OrcaSlicer or BambuStudio from G-code
@@ -44,7 +47,7 @@ Click "Run" → file picker opens → select `.gcode` or `.3mf` → interactive 
 2. Open **OrcaSlicer** (v2.5+)
 3. Go to **File → Plugins**
 4. Click **"Install Local Plugin"** (the ⊕ button)
-5. Select `dist/orca_slice_heating_inspector-0.1.0-py3-none-any.whl`
+5. Select `dist/orca_slice_heating_inspector-0.2.0-py3-none-any.whl`
 6. Enable the plugin toggle
 
 ### Method 2: Install from OrcaSlicer Cloud Store
