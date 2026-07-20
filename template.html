@@ -74,7 +74,6 @@
     <div id="canvas-container"><canvas id="plotCanvas"></canvas></div>
     <div class="action-btns">
         <button class="action-btn" id="dashboard-btn" onclick="goToDashboard()">← Dashboard</button>
-        %PIN_BUTTON%
         <button class="action-btn" id="compare-btn" onclick="compareFileInput.click()">📊 Compare</button>
     </div>
     <input type="file" id="compareFileInput" accept=".gcode,.3mf" style="display:none">
@@ -216,6 +215,7 @@ let mouseX = -1, mouseY = -1;
 const marginLeft = 170, marginRight = 220, topYStart = 60;
 let graphH = 200;
 let panels = [];
+let pinButtons = []; // [{x, y, w, h, fileNum, state}] for hit detection
 
 function getVortekFilaments(fileData) {
     // Vortek nozzles = all filaments on Heater 0 (shared swappable nozzle block)
@@ -542,7 +542,50 @@ function draw() {
     });
 
     drawLegend(visibleWidth);
+    drawPinButtons();
     drawTooltips(scaleX, scaleY, visibleWidth, plotW);
+}
+
+// ── Pin buttons on canvas ──
+function drawPinButtons() {
+    pinButtons = [];
+    const files = [{fd: data.file1, num: 1, state: data.file1_pin_state},
+                   {fd: data.file2, num: 2, state: data.file2_pin_state}];
+    files.forEach(({fd, num, state}) => {
+        if (!fd || !state || state === 'none') return;
+        const firstPanel = panels.find(p => p.type === 'main' && p.file === fd);
+        if (!firstPanel) return;
+        const isPinned = state === 'pinned';
+        const label = isPinned ? '📌 BASE' : '📌 Pin';
+        const btnW = isPinned ? 72 : 52;
+        const btnH = 22;
+        const bx = width - marginRight - btnW - 10;
+        const by = firstPanel.yStart + 4;
+        pinButtons.push({x: bx, y: by, w: btnW, h: btnH, fileNum: num, state: state});
+
+        const isHov = mouseX >= bx && mouseX <= bx + btnW && mouseY >= by && mouseY <= by + btnH;
+        const r = 4;
+        ctx.lineWidth = 1.5;
+        if (isPinned) {
+            ctx.fillStyle = isHov ? 'rgba(236, 72, 153, 0.45)' : 'rgba(236, 72, 153, 0.25)';
+            ctx.strokeStyle = '#ec4899';
+        } else {
+            ctx.fillStyle = isHov ? 'rgba(228, 228, 231, 0.25)' : 'rgba(161, 161, 170, 0.15)';
+            ctx.strokeStyle = isHov ? '#a1a1aa' : '#71717a';
+        }
+        ctx.beginPath();
+        ctx.moveTo(bx + r, by); ctx.lineTo(bx + btnW - r, by); ctx.arcTo(bx + btnW, by, bx + btnW, by + r, r);
+        ctx.lineTo(bx + btnW, by + btnH - r); ctx.arcTo(bx + btnW, by + btnH, bx + btnW - r, by + btnH, r);
+        ctx.lineTo(bx + r, by + btnH); ctx.arcTo(bx, by + btnH, bx, by + btnH - r, r);
+        ctx.lineTo(bx, by + r); ctx.arcTo(bx, by, bx + r, by, r);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+        ctx.font = isPinned ? 'bold 11px system-ui' : '11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = isPinned ? '#ec4899' : (isHov ? '#e4e4e7' : '#a1a1aa');
+        ctx.fillText(label, bx + btnW / 2, by + btnH / 2 + 4);
+    });
 }
 
 // --- Main extruder panel temperature line ---
@@ -962,13 +1005,32 @@ function updateInfoPanel(timeNum) {
 
 // Events
 canvas.addEventListener("mousedown", e => {
-    const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left;
+    const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    // Check pin button hitboxes first
+    for (const btn of pinButtons) {
+        if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+            if (btn.state === 'can_pin') {
+                if (window.orca) window.orca.postMessage({command: 'pin_baseline', file_num: btn.fileNum});
+            } else if (btn.state === 'pinned') {
+                if (window.orca) window.orca.postMessage({command: 'clear_baseline'});
+            }
+            return; // Don't start dragging
+        }
+    }
     if (mx >= marginLeft && mx <= width - marginRight) { isDragging = true; startDragX = mx; startOffsetX = offsetX; }
 });
 window.addEventListener("mouseup", () => { isDragging = false; });
 canvas.addEventListener("mousemove", e => {
     const r = canvas.getBoundingClientRect(); mouseX = e.clientX - r.left; mouseY = e.clientY - r.top;
     if (isDragging) offsetX = startOffsetX - (mouseX - startDragX);
+    // Cursor: pointer when hovering pin buttons
+    let overPin = false;
+    for (const btn of pinButtons) {
+        if (mouseX >= btn.x && mouseX <= btn.x + btn.w && mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+            overPin = true; break;
+        }
+    }
+    canvas.style.cursor = overPin ? 'pointer' : (isDragging ? 'grabbing' : 'default');
     draw();
 });
 canvas.addEventListener("wheel", e => {
@@ -1022,12 +1084,9 @@ compareFileInput.addEventListener('change', function(e) {
     compareFileInput.value = '';
 });
 
-// ── Dashboard & Pin Baseline ──
+// ── Dashboard ──
 function goToDashboard() {
     if (window.orca) window.orca.postMessage({command: 'go_dashboard'});
-}
-function pinBaseline() {
-    if (window.orca) window.orca.postMessage({command: 'pin_baseline'});
 }
 
 // ── Python → JS message handler ──
@@ -1042,15 +1101,12 @@ if (window.orca) {
             window.orca.postMessage({command: 'analyze_current'});
             return;
         }
-        if (msg.command === 'baseline_pinned') {
-            var pinBtn = document.getElementById('pin-btn');
-            if (pinBtn) {
-                pinBtn.textContent = '📌 Baseline Set: ' + (msg.name || 'pinned');
-                pinBtn.classList.add('pinned');
-                pinBtn.disabled = true;
-                pinBtn.style.opacity = '0.7';
-                pinBtn.style.cursor = 'default';
-            }
+        // Pin state changed — in-place update, no reload
+        if (msg.command === 'update_pin_states') {
+            data.file1_pin_state = msg.f1_pin_state || 'none';
+            data.file2_pin_state = msg.f2_pin_state || 'none';
+            draw();
+            return;
         }
     });
 }

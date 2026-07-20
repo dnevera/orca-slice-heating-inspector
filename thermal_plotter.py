@@ -1016,7 +1016,8 @@ def parse_file_data_from_gcode(gcode_path, config=None):
 parse_file_data_from_3mf = parse_file_data
 
 
-def generate_html(f1_data, f2_data=None, f1_source="file", f2_source="file"):
+def generate_html(f1_data, f2_data=None, f1_source="file", f2_source="file",
+                   f1_pin_state="none", f2_pin_state="none"):
     """Generate HTML string from parsed data dict(s).
 
     Args:
@@ -1024,6 +1025,8 @@ def generate_html(f1_data, f2_data=None, f1_source="file", f2_source="file"):
         f2_data: optional comparison file data dict
         f1_source: source label for file1 ("current", "pinned", "file")
         f2_source: source label for file2 ("current", "pinned", "compare", "file")
+        f1_pin_state: pin button state for file1 ("can_pin", "pinned", "none")
+        f2_pin_state: pin button state for file2 ("can_pin", "pinned", "none")
 
     Returns: HTML string ready for rendering
     """
@@ -1033,6 +1036,8 @@ def generate_html(f1_data, f2_data=None, f1_source="file", f2_source="file"):
         "file2": f2_data,
         "file1_source": f1_source,
         "file2_source": f2_source,
+        "file1_pin_state": f1_pin_state,
+        "file2_pin_state": f2_pin_state,
         "total_duration": max(f1_data["total_duration"], f2_data["total_duration"]) if f2_data else f1_data["total_duration"],
     }
     return _load_html_template().replace("%DATA_JSON%", json.dumps(js_data))

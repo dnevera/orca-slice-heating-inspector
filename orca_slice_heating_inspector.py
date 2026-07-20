@@ -48,9 +48,13 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
         super().__init__()
         self._window = None
         self._window_gen = 0        # generation counter for on_close safety
-        self._current_data = None   # parsed data for currently viewed file
-        self._current_name = None   # filename of currently viewed file
-        self._compare_data = None   # parsed comparison file (preserved across re-slices)
+        # Row data: what's currently displayed
+        self._row1_data = None      # data dict for Row 1
+        self._row1_name = None      # filename for Row 1
+        self._row2_data = None      # data dict for Row 2
+        self._row2_name = None      # filename for Row 2
+        # Compare file preserved across re-slices
+        self._compare_data = None
         self._compare_name = None
 
     def get_name(self):
@@ -65,29 +69,13 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
         # If current slice data exists, go straight to plotter
         cur_data, cur_name = shared_state.state.get_current()
         if cur_data:
-            self._current_data = cur_data
-            self._current_name = cur_name
-            bl_data, bl_name = shared_state.state.get_baseline()
-            if bl_data:
-                html = generate_html(cur_data, bl_data,
-                                     f1_source=self._get_f1_source(),
-                                     f2_source="pinned")
-                title = f"Slice Heating Inspector — {cur_name}"
-                self._create_window(html, title=title, width=1400, height=800)
-            else:
-                html = generate_html(cur_data, f1_source=self._get_f1_source())
-                self._create_window(html, title=f"Slice Heating Inspector — {cur_name}")
+            self._show_single(cur_data, cur_name, source="current")
         else:
             self._create_window(self._build_dashboard_html())
         return orca.ExecutionResult.success("Inspector opened")
 
     def _make_on_close(self, gen):
-        """Create a generation-scoped on_close callback.
-
-        wxWidgets fires on_close asynchronously (next event loop iteration).
-        Without generation check, closing window A would clear the reference
-        to the NEWLY created window B — breaking pipeline auto-refresh.
-        """
+        """Create a generation-scoped on_close callback."""
         def on_close():
             if self._window_gen == gen:
                 self._window = None
@@ -99,7 +87,6 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
         try:
             self._on_message_inner(data)
         except Exception as exc:
-            # Orca runtime swallows exceptions — post error to JS for visibility
             self._post({"command": "error",
                         "message": f"Plugin error: {exc}"})
 
@@ -121,56 +108,146 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
                 self._post({"command": "error", "message": "No file data received"})
 
         elif command == "analyze_current":
-            cur_data, cur_name = shared_state.state.get_current()
-            if cur_data:
-                self._current_data = cur_data
-                self._current_name = cur_name
-                # Priority: baseline > compare file > single view
-                bl_data, bl_name = shared_state.state.get_baseline()
-                if bl_data:
-                    html = generate_html(cur_data, bl_data,
-                                         f1_source=self._get_f1_source(),
-                                         f2_source="pinned")
-                    title = f"Slice Heating Inspector — {cur_name}"
-                    self._open_html(html, title=title, width=1400, height=900)
-                elif self._compare_data:
-                    html = generate_html(cur_data, self._compare_data,
-                                         f1_source=self._get_f1_source(),
-                                         f2_source="compare")
-                    title = f"Slice Heating Inspector — {cur_name}"
-                    self._open_html(html, title=title, width=1400, height=900)
-                else:
-                    html = generate_html(cur_data, f1_source=self._get_f1_source())
-                    self._open_html(html, title=f"Slice Heating Inspector — {cur_name}")
-            else:
-                self._post({"command": "error",
-                            "message": "No current slice — slice a project first"})
+            self._handle_analyze_current()
 
         elif command == "go_dashboard":
             self._navigate_to_dashboard()
 
         elif command == "pin_baseline":
-            if self._current_data and self._current_name:
-                shared_state.state.set_baseline(
-                    self._current_data, self._current_name)
-                self._post({"command": "baseline_pinned",
-                            "name": self._current_name})
+            self._handle_pin(data.get("file_num", 1))
 
         elif command == "clear_baseline":
-            shared_state.state.clear_baseline()
-            self._navigate_to_dashboard()
+            self._handle_unpin()
 
         elif command == "compare":
             name = data.get("name", "unknown")
             data_b64 = data.get("data_b64", "")
-            if data_b64 and self._current_data:
+            if data_b64 and self._row1_data:
                 threading.Thread(
                     target=self._do_compare_from_b64,
                     args=(name, data_b64),
                     daemon=True,
                 ).start()
 
+    # ── Core display methods ──────────────────────────────────────────
+
+    def _show_single(self, f_data, name, source="file"):
+        """Show a single file in plotter view."""
+        st = shared_state.state
+        self._row1_data = f_data
+        self._row1_name = name
+        self._row2_data = None
+        self._row2_name = None
+
+        pin_state = "pinned" if (st.has_baseline and st.baseline_name == name) else "can_pin"
+        f1_source = self._source_with_pin(source, name)
+
+        html = generate_html(f_data, f1_source=f1_source,
+                             f1_pin_state=pin_state)
+        self._open_html(html, title=f"Slice Heating Inspector — {name}")
+
+    def _show_comparison(self, f1_data, f1_name, f1_source,
+                         f2_data, f2_name, f2_source,
+                         f1_pin="none", f2_pin="none"):
+        """Show two files in comparison view."""
+        self._row1_data = f1_data
+        self._row1_name = f1_name
+        self._row2_data = f2_data
+        self._row2_name = f2_name
+
+        html = generate_html(f1_data, f2_data,
+                             f1_source=f1_source, f2_source=f2_source,
+                             f1_pin_state=f1_pin, f2_pin_state=f2_pin)
+        title = f"Slice Heating Inspector — {f1_name}"
+        self._open_html(html, title=title, width=1400, height=900)
+
+    # ── Handlers ──────────────────────────────────────────────────────
+
+    def _handle_analyze_current(self):
+        """Handle new slice from Orca pipeline."""
+        cur_data, cur_name = shared_state.state.get_current()
+        if not cur_data:
+            self._post({"command": "error",
+                        "message": "No current slice — slice a project first"})
+            return
+
+        st = shared_state.state
+        if st.has_baseline:
+            # Fixed base mode: pinned base = Row1 (always first), new slice = Row2
+            bl_data, bl_name = st.get_baseline()
+            self._show_comparison(
+                bl_data, bl_name, "pinned",
+                cur_data, cur_name, "current",
+                f1_pin="pinned", f2_pin="can_pin")
+        elif self._row1_data and self._row1_name:
+            # Rotation mode: previous → Row2, new → Row1
+            prev_data = self._row1_data
+            prev_name = self._row1_name
+            self._show_comparison(
+                cur_data, cur_name, "current",
+                prev_data, prev_name, "previous",
+                f1_pin="can_pin", f2_pin="can_pin")
+        else:
+            # First slice — single view
+            self._show_single(cur_data, cur_name, source="current")
+
+    def _handle_pin(self, file_num):
+        """Pin the specified row as baseline — in-place, no window reload."""
+        if file_num == 2 and self._row2_data:
+            pin_data, pin_name = self._row2_data, self._row2_name
+        else:
+            pin_data, pin_name = self._row1_data, self._row1_name
+
+        if not pin_data:
+            return
+
+        shared_state.state.set_baseline(pin_data, pin_name)
+
+        # Just update pin states in JS — no window close/reopen
+        # Pinned row = "pinned", other row = "can_pin" (switchable)
+        if file_num == 1:
+            f1_pin = "pinned"
+            f2_pin = "can_pin" if self._row2_data else "none"
+        else:
+            f1_pin = "can_pin" if self._row1_data else "none"
+            f2_pin = "pinned"
+        self._post({"command": "update_pin_states",
+                    "f1_pin_state": f1_pin, "f2_pin_state": f2_pin})
+
+    def _handle_unpin(self):
+        """Clear baseline — in-place, no window reload."""
+        shared_state.state.clear_baseline()
+
+        # Both rows become can_pin (or can_pin for single)
+        f1_pin = "can_pin" if self._row1_data else "none"
+        f2_pin = "can_pin" if self._row2_data else "none"
+        self._post({"command": "update_pin_states",
+                    "f1_pin_state": f1_pin, "f2_pin_state": f2_pin})
+
     # ── Helpers ───────────────────────────────────────────────────────
+
+    def _source_with_pin(self, base_source, name):
+        """Add 'current_pinned' if this file is both current and pinned."""
+        st = shared_state.state
+        if st.has_baseline and st.baseline_name == name and base_source == "current":
+            return "current_pinned"
+        return base_source
+
+    def _guess_source(self, name):
+        """Guess source label from name."""
+        cur_data, cur_name = shared_state.state.get_current()
+        if cur_name and cur_name == name:
+            return "current"
+        return "file"
+
+    def _row2_source_label(self):
+        """Determine source label for Row 2 based on context."""
+        if self._compare_name and self._row2_name == self._compare_name:
+            return "compare"
+        cur_data, cur_name = shared_state.state.get_current()
+        if cur_name and self._row2_name == cur_name:
+            return "current"
+        return "previous"
 
     def _post(self, msg):
         """Post a message to JS (thread-safe via orca runtime)."""
@@ -180,7 +257,6 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
     def _create_window(self, html, title="Slice Heating Inspector",
                        width=1200, height=800):
         """Create a new window with generation-scoped on_close."""
-        html = html.replace("%PIN_BUTTON%", self._pin_button_html())
         self._window_gen += 1
         self._window = orca.host.ui.create_window(
             html=html,
@@ -194,38 +270,10 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
 
     def _open_html(self, html, title="Slice Heating Inspector",
                    width=1200, height=800):
-        """Close current window, open new one with given HTML.
-
-        wxWebView's document.write via post is unreliable for large HTML.
-        The proven pattern: close + create_window.
-        Generation counter prevents async _on_close from clearing the new window.
-        """
+        """Close current window, open new one with given HTML."""
         if self._window and self._window.is_open():
             self._window.close()
         self._create_window(html, title, width, height)
-
-    def _get_f1_source(self):
-        """Determine source label for file1 (current slice).
-
-        Returns 'current_pinned' if this slice is also the pinned baseline,
-        otherwise 'current'.
-        """
-        st = shared_state.state
-        if st.has_baseline and st.baseline_name == self._current_name:
-            return "current_pinned"
-        return "current"
-
-    def _pin_button_html(self):
-        """Render pin button HTML reflecting current baseline state."""
-        st = shared_state.state
-        if st.has_baseline:
-            bl_name = st.baseline_name or 'pinned'
-            return (
-                f'<button class="action-btn pinned" id="pin-btn"'
-                f' disabled style="opacity:0.7;cursor:default"'
-                f'>\U0001f4cc Baseline Set: {bl_name}</button>'
-            )
-        return '<button class="action-btn" id="pin-btn" onclick="pinBaseline()">\U0001f4cc Pin as Baseline</button>'
 
     def _navigate_to_dashboard(self):
         self._open_html(self._build_dashboard_html())
@@ -241,22 +289,22 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
             bl_name = st.baseline_name or "unnamed"
             baseline_section = (
                 '<div class="baseline-box">'
-                '<span class="bl-label">📌 Baseline:</span>'
+                '<span class="bl-label">\U0001f4cc Baseline:</span>'
                 f'<span class="bl-name">{bl_name}</span>'
-                '<button class="bl-clear" onclick="clearBaseline()">✕</button>'
+                '<button class="bl-clear" onclick="clearBaseline()">\u2715</button>'
                 '</div>'
             )
         else:
             baseline_section = (
                 '<div class="baseline-box empty">'
-                '<span class="bl-label">No baseline set — pin from plotter view</span>'
+                '<span class="bl-label">No baseline set \u2014 pin from plotter view</span>'
                 '</div>'
             )
 
         # Current OrcaSlicer slice option — no internal paths in UI
         current_option = (
             '<option value="current">'
-            '📊 Current OrcaSlicer Slice</option>'
+            '\U0001f4ca Current OrcaSlicer Slice</option>'
         )
 
         return (_load_dashboard_template()
@@ -293,11 +341,19 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
                 return
 
             f_data["filename"] = filename
-            self._current_data = f_data
-            self._current_name = filename
 
-            html = generate_html(f_data)
-            self._open_html(html, title=f"Slice Heating Inspector — {filename}")
+            # Check if baseline exists → show comparison
+            st = shared_state.state
+            if st.has_baseline:
+                bl_data, bl_name = st.get_baseline()
+                self._compare_data = f_data
+                self._compare_name = filename
+                self._show_comparison(
+                    bl_data, bl_name, "pinned",
+                    f_data, filename, "compare",
+                    f1_pin="pinned", f2_pin="can_pin")
+            else:
+                self._show_single(f_data, filename, source="file")
         except Exception as exc:
             self._post({"command": "error",
                         "message": f"Analysis error: {exc}"})
@@ -327,16 +383,28 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
             else:
                 return
 
-            if not f2_data or not self._current_data:
+            if not f2_data or not self._row1_data:
                 return
 
             f2_data["filename"] = filename
-            # Store comparison data — preserved across re-slices
             self._compare_data = f2_data
             self._compare_name = filename
-            html = generate_html(self._current_data, f2_data)
-            title = f"Slice Heating Inspector — {self._current_name} vs {filename}"
-            self._open_html(html, title=title, width=1400, height=900)
+
+            st = shared_state.state
+            if st.has_baseline:
+                # Base vs compare
+                bl_data, bl_name = st.get_baseline()
+                self._show_comparison(
+                    bl_data, bl_name, "pinned",
+                    f2_data, filename, "compare",
+                    f1_pin="pinned", f2_pin="can_pin")
+            else:
+                # Current vs compare (no pin, both can be pinned)
+                self._show_comparison(
+                    self._row1_data, self._row1_name,
+                    self._guess_source(self._row1_name),
+                    f2_data, filename, "compare",
+                    f1_pin="can_pin", f2_pin="can_pin")
         except Exception as exc:
             self._post({"command": "error",
                         "message": f"Analysis error: {exc}"})
@@ -351,20 +419,13 @@ class SliceHeatingInspector(orca.script.ScriptPluginCapabilityBase):
 _SliceAutoCapture = None
 try:
     class SliceAutoCapture(orca.slicing.SlicingPipelineCapabilityBase):
-        """Pipeline capability: auto-captures G-code on every Slice.
-
-        Hooks into psGCodePostProcess — fired at the end of background
-        slicing (for BBL printers this runs inside process_fff).
-        Reads ctx.gcode_path, parses temperature events, stores in
-        shared_state. If inspector window is open, auto-navigates
-        to updated plotter (live reload on re-slice).
-        """
+        """Pipeline capability: auto-captures G-code on every Slice."""
 
         def __init__(self):
             super().__init__()
 
         def get_name(self):
-            return "Slice Heating Inspector — Auto Capture"
+            return "Slice Heating Inspector \u2014 Auto Capture"
 
         def execute(self, ctx):
             # Only act at the final G-code post-process step
@@ -392,15 +453,11 @@ try:
                 shared_state.state.set_current(f_data, name)
 
                 # Signal the inspector window (tiny message, no HTML payload).
-                # window.post() is safe from slicing thread (CallAfter, non-blocking).
-                # JS receives slice_ready → bounces back analyze_current → Python
-                # handles it on UI thread via _open_html (close+create_window = on top).
                 window = shared_state.state.get_inspector_window()
                 if window is not None and window.is_open():
                     window.post({"command": "slice_ready", "name": name})
 
             except Exception as exc:
-                # Store error for debugging — visible when user clicks analyze_current
                 shared_state.state.set_current(
                     None, f"Pipeline error: {exc}")
 
