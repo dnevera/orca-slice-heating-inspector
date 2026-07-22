@@ -40,26 +40,23 @@ Canvas-based zoom/pan/hover inspector with side-by-side comparison and baseline 
 
 ### From OrcaSlicer Cloud
 
-1. Open **OrcaSlicer** (v2.5+)
-2. Go to **File → Plugins** → **"Explore"**
-3. Search for **"Slice Heating Inspector"**
-4. Click **"Install"**
-
-> Requires OrcaSlicer Cloud account login.
+1. Go to [**Plugin Hub**](https://cloud.orcaslicer.com/app/plugins/plugin-hub)
+2. Find **"Slice Heating Inspector"** and click **Subscribe**
+3. Open **OrcaSlicer** → **File → Plugins** → the plugin appears with Source **Subscribed**
+4. Check **Activate** to enable it
 
 ### From Local File
 
-1. Clone and build:
+1. Build the `.whl`:
    ```bash
    git clone https://github.com/dnevera/orca-slice-heating-inspector.git
    cd orca-slice-heating-inspector
    python3 build_wheel.py
    ```
-2. Open **OrcaSlicer** (v2.5+)
-3. Go to **File → Plugins**
-4. Click **"Install Local Plugin"** (⊕)
-5. Select `dist/orca_slice_heating_inspector-0.2.1-py3-none-any.whl`
-6. Enable the plugin toggle
+2. Open **OrcaSlicer** → **File → Plugins**
+3. Click **Install plugin ▾** → **Install local plugin**
+4. Select `dist/orca_slice_heating_inspector-0.2.1-py3-none-any.whl`
+5. The plugin appears with Source **Mine** — check **Activate** to enable it
 
 ---
 
@@ -76,24 +73,9 @@ Canvas-based zoom/pan/hover inspector with side-by-side comparison and baseline 
 
 ## Uninstallation
 
-### Local Plugin
-
 1. Open **File → Plugins**
 2. Right-click **"Slice Heating Inspector"**
-3. Select **"Delete"** → Confirm
-
-Plugin files location:
-| OS | Path |
-|----|------|
-| macOS | `~/Library/Application Support/OrcaSlicer/orca_plugins/` |
-| Windows | `%APPDATA%\OrcaSlicer\orca_plugins\` |
-| Linux | `~/.config/OrcaSlicer/orca_plugins/` |
-
-### Cloud Plugin
-
-1. Open **File → Plugins**
-2. Find **"Slice Heating Inspector"**
-3. Click **"Unsubscribe"**
+3. Select **"Delete"** (local) or **"Unsubscribe"** (cloud)
 
 ---
 
