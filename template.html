@@ -347,10 +347,26 @@ function draw() {
         });
     });
 
-    // scaleY now takes per-panel height
-    const scaleY = (temp, yS, pH) => yS + pH - (temp / 250) * pH;
-    const tempLevels = [0, 50, 100, 140, 180, 220, 250];
-    const nozzleTempLevels = [0, 100, 180, 220];
+    // Compute dynamic Y-axis max from actual temperature data
+    let globalMaxTemp = 250; // minimum baseline
+    [data.file1, data.file2].forEach(fd => {
+        if (!fd || !fd.track) return;
+        fd.track.forEach(pt => {
+            if (pt.t0 > globalMaxTemp) globalMaxTemp = pt.t0;
+            if (pt.t1 > globalMaxTemp) globalMaxTemp = pt.t1;
+        });
+    });
+    // Round up to nearest 10 with 10°C headroom
+    const yAxisMax = Math.ceil((globalMaxTemp + 10) / 10) * 10;
+
+    const scaleY = (temp, yS, pH) => yS + pH - (temp / yAxisMax) * pH;
+
+    // Generate tempLevels dynamically with ~40°C steps
+    const tempStep = yAxisMax <= 200 ? 25 : yAxisMax <= 300 ? 40 : 50;
+    const tempLevels = [0];
+    for (let t = tempStep; t < yAxisMax; t += tempStep) tempLevels.push(t);
+    tempLevels.push(yAxisMax);
+    const nozzleTempLevels = [0, 100, 180, Math.min(220, yAxisMax)];
 
     const lastPanel = panels[panels.length - 1];
     const bottomY = lastPanel ? lastPanel.yStart + lastPanel.height : height;

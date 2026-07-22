@@ -58,7 +58,7 @@ Canvas-based zoom/pan/hover inspector with side-by-side comparison and baseline 
 2. Open **OrcaSlicer** (v2.5+)
 3. Go to **File → Plugins**
 4. Click **"Install Local Plugin"** (⊕)
-5. Select `dist/orca_slice_heating_inspector-0.2.0-py3-none-any.whl`
+5. Select `dist/orca_slice_heating_inspector-0.2.1-py3-none-any.whl`
 6. Enable the plugin toggle
 
 ---

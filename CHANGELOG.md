@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — 2026-07-22
+
+### Fixed
+- Dynamic Y-axis scaling — adapts to actual temperature data instead of hardcoded 250°C max (fixes ASA 275°C+ clipping)
+- Temperature grid levels generated dynamically with appropriate step sizes
+
+### Changed
+- README updated: hero-style screenshots, OrcaSlicer Cloud badge, accurate file list, simplified author
+
 ## 0.2.0 — 2026-07-21
 
 ### Added

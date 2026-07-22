@@ -5,7 +5,7 @@
 # name = "Slice Heating Inspector"
 # description = "Interactive temperature timeline visualization for H2C multi-nozzle G-code. Analyzes preheat/cooldown events, toolchanges, and nozzle assignments. Compare current slice with external 3MF."
 # author = "dnevera"
-# version = "0.2.0"
+# version = "0.2.1"
 # type = "script"
 # ///
 """Slice Heating Inspector — OrcaSlicer Plugin (Script + Pipeline).
