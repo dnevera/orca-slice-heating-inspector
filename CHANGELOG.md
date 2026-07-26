@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-07-26
+
+### Added
+- **Exhaust Fan Track** — dedicated timeline panel showing `M106 P3` exhaust fan activity
+  - Step-function visualization with phase-colored zones (startup, ramp, heating, printing, TC recovery, post-print)
+  - Parses both `[exhaust-enforcer]`-tagged and native firmware fan commands
+  - Interactive tooltip: fan % and current phase on hover
+- `_build_exhaust_track()` — converts line-based exhaust events to time-based track
+- `exhaust_track` field in parsed file data output
+
 ## 0.2.1 — 2026-07-22
 
 ### Fixed

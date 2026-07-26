@@ -309,6 +309,30 @@ def build_timeline_and_interpolate(track, tool_changes, m73_points, total_lines,
     return total_duration, get_time
 
 
+def _build_exhaust_track(raw_exhaust, get_time):
+    """Convert exhaust_track from parser (line, s_value, phase) to time-based list.
+
+    Returns list of dicts: [{"time": float, "pct": int, "s": int, "phase": str}, ...]
+    Sorted by time. Adds an initial point at t=0, pct=0 if first event is not at line 1.
+    """
+    if not raw_exhaust:
+        return []
+
+    result = []
+    for line_num, s_val, phase in raw_exhaust:
+        t = get_time(line_num)
+        pct = round(s_val * 100 / 255)
+        result.append({"time": t, "pct": pct, "s": s_val, "phase": phase})
+
+    result.sort(key=lambda x: x["time"])
+
+    # Ensure we start from 0% at t=0 if first event isn't at the very beginning
+    if result and result[0]["time"] > 1.0:
+        result.insert(0, {"time": 0, "pct": 0, "s": 0, "phase": "off"})
+
+    return result
+
+
 def parse_file_data(filepath):
     if not filepath or not os.path.exists(filepath):
         return None
@@ -608,6 +632,9 @@ def parse_file_data(filepath):
             if object_names:
                 slice_info["objects"] = sorted(object_names)
 
+        # ── Exhaust fan track: line→time conversion ──
+        exhaust_track_timed = _build_exhaust_track(stats.get("exhaust_track", []), get_time)
+
         return {
             "filename": os.path.basename(filepath),
             "slicer": slicer_name,
@@ -628,6 +655,7 @@ def parse_file_data(filepath):
             "toolchange_zones": toolchange_zones,
             "track": track,
             "slice_info": slice_info,
+            "exhaust_track": exhaust_track_timed,
         }
     except Exception as e:
         import traceback
@@ -984,6 +1012,9 @@ def parse_file_data_from_gcode(gcode_path, config=None):
 
         cooldown_count = sum(1 for ev in raw_preheats if ev.get("cooldown_temp") is not None)
 
+        # ── Exhaust fan track: line→time conversion ──
+        exhaust_track_timed = _build_exhaust_track(stats.get("exhaust_track", []), get_time)
+
         return {
             "filename": os.path.basename(gcode_path),
             "slicer": slicer_name,
@@ -1004,6 +1035,7 @@ def parse_file_data_from_gcode(gcode_path, config=None):
             "toolchange_zones": toolchange_zones,
             "track": track,
             "slice_info": effective.get("slice_info", {}),
+            "exhaust_track": exhaust_track_timed,
         }
     except Exception as e:
         import traceback

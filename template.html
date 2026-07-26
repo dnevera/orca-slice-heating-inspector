@@ -256,13 +256,34 @@ function calculateLayout() {
 
     const nMain = allExts.length;
     const nNozzle = allVortek.length;
+    const nExhaust = files.filter(fd => fd.exhaust_track && fd.exhaust_track.length > 0).length;
 
-    // Height budget: main panels take remaining space after nozzle panels + gaps
-    const nozzleBudget = nNozzle * NOZZLE_H + Math.max(0, nNozzle - 1) * NOZZLE_GAP + SECTION_GAP;
-    const mainBudget = height - topYStart - nozzleBudget - Math.max(0, nMain - 1) * MAIN_GAP - 30;
+    // Height budget: main panels take remaining space after nozzle + exhaust panels + gaps
+    const EXHAUST_H_BUDGET = 52;
+    const nozzleBudget = nNozzle * NOZZLE_H + Math.max(0, nNozzle - 1) * NOZZLE_GAP + (nNozzle > 0 ? SECTION_GAP : 0);
+    const exhaustBudget = nExhaust > 0 ? (nExhaust * EXHAUST_H_BUDGET + Math.max(0, nExhaust - 1) * NOZZLE_GAP + SECTION_GAP) : 0;
+    const mainBudget = height - topYStart - nozzleBudget - exhaustBudget - Math.max(0, nMain - 1) * MAIN_GAP - 30;
     graphH = Math.max(70, Math.floor(mainBudget / Math.max(1, nMain)));
 
     let y = topYStart;
+
+    // Exhaust fan panels FIRST (top of chart)
+    const EXHAUST_H = 52;
+    const allExhaust = files.filter(fd => fd.exhaust_track && fd.exhaust_track.length > 0);
+    if (allExhaust.length > 0) {
+        allExhaust.forEach((fd, i) => {
+            panels.push({
+                type: 'exhaust',
+                yStart: y,
+                height: EXHAUST_H,
+                file: fd,
+                color: '#22d3ee',  // cyan
+                label: '🌀 Exhaust Fan'
+            });
+            y += EXHAUST_H + NOZZLE_GAP;
+        });
+        y += SECTION_GAP - NOZZLE_GAP;
+    }
 
     // Main extruder panels
     allExts.forEach(({ fd, extId }, i) => {
@@ -386,12 +407,13 @@ function draw() {
     panels.forEach((p, pIdx) => {
         const pH = p.height;
         const isNozzle = p.type === 'nozzle';
-        const levels = isNozzle ? nozzleTempLevels : tempLevels;
+        const isExhaust = p.type === 'exhaust';
+        const levels = isExhaust ? [] : (isNozzle ? nozzleTempLevels : tempLevels);
 
-        ctx.fillStyle = isNozzle ? "#0e0e10" : "#111113";
+        ctx.fillStyle = (isNozzle || isExhaust) ? "#0e0e10" : "#111113";
         ctx.fillRect(marginLeft, p.yStart, visibleWidth, pH);
-        ctx.strokeStyle = isNozzle ? "#2d2d30" : "#27272a";
-        ctx.lineWidth = isNozzle ? 1 : 1.5;
+        ctx.strokeStyle = (isNozzle || isExhaust) ? "#2d2d30" : "#27272a";
+        ctx.lineWidth = (isNozzle || isExhaust) ? 1 : 1.5;
         ctx.strokeRect(marginLeft, p.yStart, visibleWidth, pH);
 
         // End G-code zone (end_gcode_time → total_duration) — dark grey / hatched
@@ -500,21 +522,33 @@ function draw() {
         }
 
         // Label
-        ctx.fillStyle = isNozzle ? "#71717a" : "#e4e4e7";
-        ctx.font = isNozzle ? "10px system-ui" : "bold 11px system-ui, sans-serif";
+        ctx.fillStyle = (isNozzle || isExhaust) ? "#71717a" : "#e4e4e7";
+        ctx.font = (isNozzle || isExhaust) ? "10px system-ui" : "bold 11px system-ui, sans-serif";
         ctx.textAlign = "left";
-        const label = isNozzle ? p.label : (p.file.slicer + " Ext " + p.extId);
+        const label = isExhaust ? p.label : (isNozzle ? p.label : (p.file.slicer + " Ext " + p.extId));
         ctx.fillText(label, 15, p.yStart + pH / 2 + 4);
 
-        // Temp grid lines
-        levels.forEach(t => {
-            const y = scaleY(t, p.yStart, pH);
-            if (y < p.yStart || y > p.yStart + pH) return;
-            ctx.strokeStyle = "#27272a"; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.setLineDash([4, 4]); ctx.moveTo(marginLeft, y); ctx.lineTo(marginLeft + visibleWidth, y); ctx.stroke(); ctx.setLineDash([]);
-            ctx.fillStyle = "#52525b"; ctx.font = "9px system-ui"; ctx.textAlign = "right";
-            ctx.fillText(t + "°", marginLeft - 5, y + 3);
-        });
+        // Grid lines: temp (°C) for main/nozzle, percentage (%) for exhaust
+        if (isExhaust) {
+            // Draw % grid for exhaust: 0%, 50%, 100%
+            [0, 50, 100].forEach(pctVal => {
+                const yPos = p.yStart + pH - (pctVal / 100) * pH;
+                if (yPos < p.yStart || yPos > p.yStart + pH) return;
+                ctx.strokeStyle = "#27272a"; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.setLineDash([4, 4]); ctx.moveTo(marginLeft, yPos); ctx.lineTo(marginLeft + visibleWidth, yPos); ctx.stroke(); ctx.setLineDash([]);
+                ctx.fillStyle = "#52525b"; ctx.font = "9px system-ui"; ctx.textAlign = "right";
+                ctx.fillText(pctVal + "%", marginLeft - 5, yPos + 3);
+            });
+        } else {
+            levels.forEach(t => {
+                const y = scaleY(t, p.yStart, pH);
+                if (y < p.yStart || y > p.yStart + pH) return;
+                ctx.strokeStyle = "#27272a"; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.setLineDash([4, 4]); ctx.moveTo(marginLeft, y); ctx.lineTo(marginLeft + visibleWidth, y); ctx.stroke(); ctx.setLineDash([]);
+                ctx.fillStyle = "#52525b"; ctx.font = "9px system-ui"; ctx.textAlign = "right";
+                ctx.fillText(t + "°", marginLeft - 5, y + 3);
+            });
+        }
 
         // Time grid (only bottom-most panel gets labels)
         for (let i = 0; i <= 6; i++) {
@@ -548,7 +582,9 @@ function draw() {
 
     // Temperature lines
     panels.forEach(p => {
-        if (p.type === 'nozzle') {
+        if (p.type === 'exhaust') {
+            drawExhaustPanel(p, scaleX, visibleWidth);
+        } else if (p.type === 'nozzle') {
             drawNozzlePanel(p, scaleX, scaleY, visibleWidth);
         } else {
             drawTempLine(p.yStart, p.height, p.heater, p.file, scaleX, scaleY, visibleWidth);
@@ -628,6 +664,81 @@ function drawPinButtons() {
         ctx.fillStyle = isPinned ? '#ec4899' : (isHov ? '#e4e4e7' : '#a1a1aa');
         ctx.fillText(label, bx + btnW / 2, by + btnH / 2 + 4);
     });
+}
+
+// --- Exhaust fan step-function panel ---
+// Draws PWM fan % as a step function with phase-colored zones.
+const EXHAUST_PHASE_COLORS = {
+    off:         'rgba(113, 113, 122, 0.15)',
+    heating:     'rgba(239, 68, 68, 0.25)',    // red-ish
+    preprint:    'rgba(249, 115, 22, 0.25)',    // orange
+    startup:     'rgba(34, 197, 94, 0.30)',     // green
+    ramp:        'rgba(34, 197, 94, 0.20)',     // green dimmer
+    printing:    'rgba(59, 130, 246, 0.20)',    // blue
+    tc_recovery: 'rgba(250, 204, 21, 0.30)',   // yellow
+    postprint:   'rgba(168, 85, 247, 0.25)',    // purple
+    enforcer:    'rgba(34, 211, 238, 0.20)',    // cyan
+    native:      'rgba(113, 113, 122, 0.20)',   // grey
+};
+
+function drawExhaustPanel(panel, scaleX, visibleWidth) {
+    const fd = panel.file;
+    const track = fd.exhaust_track;
+    if (!track || track.length === 0) return;
+
+    const yStart = panel.yStart;
+    const pH = panel.height;
+
+    // Helper: pct (0-100) → Y coordinate (bottom=0%, top=100%)
+    function pctY(pct) { return yStart + pH - (pct / 100) * pH; }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(marginLeft, yStart, visibleWidth, pH);
+    ctx.clip();
+
+    // 1. Draw phase-colored zones (filled rectangles under the step function)
+    for (let i = 0; i < track.length; i++) {
+        const pt = track[i];
+        const nextPt = track[i + 1];
+        const xStart = scaleX(pt.time);
+        const xEnd = nextPt ? scaleX(nextPt.time) : scaleX(fd.total_duration);
+        const l = Math.max(marginLeft, xStart);
+        const r = Math.min(marginLeft + visibleWidth, xEnd);
+        if (l >= r) continue;
+
+        // Fill zone from bottom to step level
+        const yTop = pctY(pt.pct);
+        const yBot = yStart + pH;
+        const color = EXHAUST_PHASE_COLORS[pt.phase] || EXHAUST_PHASE_COLORS.native;
+        ctx.fillStyle = color;
+        ctx.fillRect(l, yTop, r - l, yBot - yTop);
+    }
+
+    // 2. Draw step-function line (cyan)
+    ctx.beginPath();
+    ctx.strokeStyle = '#22d3ee';
+    ctx.lineWidth = 1.5;
+    let lastY = null;
+    for (let i = 0; i < track.length; i++) {
+        const pt = track[i];
+        const x = scaleX(pt.time);
+        const y = pctY(pt.pct);
+        if (lastY === null) {
+            ctx.moveTo(x, y);
+        } else {
+            // Step: horizontal at old Y, then vertical to new Y
+            ctx.lineTo(x, lastY);
+            ctx.lineTo(x, y);
+        }
+        lastY = y;
+        // Extend horizontally to next point or end
+        const nextX = (i + 1 < track.length) ? scaleX(track[i + 1].time) : scaleX(fd.total_duration);
+        ctx.lineTo(nextX, y);
+    }
+    ctx.stroke();
+
+    ctx.restore();
 }
 
 // --- Main extruder panel temperature line ---
@@ -918,6 +1029,21 @@ function drawTooltips(scaleX, scaleY, visibleWidth, plotW) {
             const wz = fd.wipe_zones.find(z => timeNum >= z.start_time && timeNum <= z.end_time);
             if (wz) tips.push({ panel: hoveredPanel, type: "wipe_zone", info: wz });
         }
+
+        // 5. Exhaust fan tooltip (when hovering exhaust panel)
+        if (hoveredPanel.type === 'exhaust' && fd.exhaust_track && fd.exhaust_track.length > 0) {
+            // Find current exhaust state at timeNum (step function: last point <= timeNum)
+            let exhState = null;
+            for (let i = fd.exhaust_track.length - 1; i >= 0; i--) {
+                if (fd.exhaust_track[i].time <= timeNum) {
+                    exhState = fd.exhaust_track[i];
+                    break;
+                }
+            }
+            if (exhState) {
+                tips.push({ panel: hoveredPanel, type: "exhaust", info: exhState });
+            }
+        }
     }
 
     if (tips.length === 0) return;
@@ -926,7 +1052,7 @@ function drawTooltips(scaleX, scaleY, visibleWidth, plotW) {
     let totalHeight = 0;
     const gap = 8;
     tips.forEach(item => {
-        if (item.type === "tc_zone" || item.type === "wipe_zone" || item.type === "preheat" || item.type === "precool") {
+        if (item.type === "tc_zone" || item.type === "wipe_zone" || item.type === "preheat" || item.type === "precool" || item.type === "exhaust") {
             totalHeight += 20 + gap;
         } else {
             totalHeight += 108 + gap;
@@ -949,7 +1075,7 @@ function drawTooltips(scaleX, scaleY, visibleWidth, plotW) {
     tips.forEach(item => {
         const p = item.panel;
 
-        if (item.type === "tc_zone" || item.type === "wipe_zone" || item.type === "preheat" || item.type === "precool") {
+        if (item.type === "tc_zone" || item.type === "wipe_zone" || item.type === "preheat" || item.type === "precool" || item.type === "exhaust") {
             let label, color, ttW;
             if (item.type === "tc_zone") {
                 label = "🔧 Toolchange"; color = "rgba(147, 51, 234, 0.9)"; ttW = 100;
@@ -957,6 +1083,10 @@ function drawTooltips(scaleX, scaleY, visibleWidth, plotW) {
                 label = "🏗️ Wipe Tower"; color = "rgba(6, 182, 212, 0.9)"; ttW = 95;
             } else if (item.type === "preheat") {
                 label = "🔥 Pheat " + item.info.target_temp + "°C"; color = "rgba(220, 38, 38, 0.9)"; ttW = 115;
+            } else if (item.type === "exhaust") {
+                const phaseNames = {off:'off', heating:'heating', preprint:'preprint', startup:'startup', ramp:'ramp', printing:'printing', tc_recovery:'TC recovery', postprint:'post-print', enforcer:'enforcer', native:'native'};
+                const phaseName = phaseNames[item.info.phase] || item.info.phase;
+                label = "🌀 Fan " + item.info.pct + "% (" + phaseName + ")"; color = "rgba(34, 211, 238, 0.9)"; ttW = 155;
             } else {
                 label = "❄️ Pcool " + item.info.target_temp + "°C"; color = "rgba(132, 204, 22, 0.9)"; ttW = 115;
             }

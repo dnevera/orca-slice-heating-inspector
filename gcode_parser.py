@@ -57,6 +57,7 @@ def parse_critical_gcode_from_lines(lines_iter, filament_maps_str=None, is_byte_
     temp_T0 = 0
     temp_T1 = 0
     temp_track = []
+    exhaust_track = []  # (line, s_value_0_255, phase_str)
 
     toolchange_blocks = []
     current_tc_block = []
@@ -91,6 +92,35 @@ def parse_critical_gcode_from_lines(lines_iter, filament_maps_str=None, is_byte_
             if "M1002 gcode_claim_action : 0" in cmd_part:
                 in_tc_block = False
                 toolchange_blocks.append("\n".join(current_tc_block))
+
+        # ── Exhaust fan: parse M106 P3 S<val> (with or without [exhaust-enforcer] tag) ──
+        if line.startswith("M106") and "P3" in line:
+            import re as _re_exh
+            m_exh = _re_exh.search(r'M106\s+P3\s+S(\d+)', line)
+            if m_exh:
+                s_val_raw = int(m_exh.group(1))
+                # Determine phase from enforcer comment
+                if '[exhaust-enforcer]' in line:
+                    comment = line.split(';', 1)[1] if ';' in line else ''
+                    if 'startup blast' in comment:
+                        phase = 'startup'
+                    elif 'ramp' in comment:
+                        phase = 'ramp'
+                    elif 'heating min' in comment:
+                        phase = 'heating'
+                    elif 'TC recovery' in comment:
+                        phase = 'tc_recovery'
+                    elif 'layer enforce' in comment:
+                        phase = 'printing'
+                    elif 'post-print' in comment:
+                        phase = 'postprint'
+                    elif 'preprint' in comment:
+                        phase = 'preprint'
+                    else:
+                        phase = 'enforcer'
+                else:
+                    phase = 'native'
+                exhaust_track.append((total_lines, s_val_raw, phase))
 
         if not cmd_part:
             continue
@@ -228,7 +258,8 @@ def parse_critical_gcode_from_lines(lines_iter, filament_maps_str=None, is_byte_
         "temp_events": temp_events,
         "temp_track": temp_track,
         "toolchange_blocks": toolchange_blocks,
-        "m73_points": m73_points
+        "m73_points": m73_points,
+        "exhaust_track": exhaust_track,
     }
     return critical_events, total_lines, stats
 
