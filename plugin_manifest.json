@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "Slice Heating Inspector",
   "import_name": "orca_slice_heating_inspector",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Interactive temperature timeline visualization for multi-nozzle G-code.",
   "author": "Nevera",
   "license": "MIT",

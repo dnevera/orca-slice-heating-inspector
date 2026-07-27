@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 — 2026-07-27
+
+### Fixed
+- Manifest `type` now declares both `script` and `slicing_pipeline` (was missing `slicing_pipeline`)
+
 ## 0.3.1 — 2026-07-27
 
 ### Added
