@@ -65,8 +65,8 @@
         .action-btn:active { background: #27272a; }
         .action-btn.loading { opacity: 0.5; pointer-events: none; }
         .action-btn.pinned { background: #166534; border-color: #22c55e; color: #bbf7d0; }
-        #canvas-container { width: 100vw; height: calc(100vh - 75px); position: relative; }
-        canvas { display: block; width: 100%; height: 100%; }
+        #canvas-container { width: 100vw; height: calc(100vh - 75px); position: relative; overflow-y: auto; overflow-x: hidden; }
+        canvas { display: block; width: 100%; }
     </style>
 </head>
 <body>
@@ -237,11 +237,8 @@ function getVortekFilaments(fileData) {
 
 function calculateLayout() {
     width = window.innerWidth;
-    height = window.innerHeight - 75;
+    const viewportH = window.innerHeight - 75;
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
 
     const panelColors = ["#3b82f6", "#ec4899", "#60a5fa", "#f472b6"];
     const NOZZLE_H = 52;   // height of mini nozzle-track panels
@@ -258,27 +255,39 @@ function calculateLayout() {
     const nNozzle = allVortek.length;
     const nExhaust = files.filter(fd => fd.exhaust_track && fd.exhaust_track.length > 0).length;
 
-    // Height budget: main panels take remaining space after nozzle + exhaust panels + gaps
+    // Height budget: try to fit in viewport, but allow scrolling if needed
     const EXHAUST_H_BUDGET = 52;
+    const MIN_GRAPH_H = 120;  // minimum height for main extruder panels
     const nozzleBudget = nNozzle * NOZZLE_H + Math.max(0, nNozzle - 1) * NOZZLE_GAP + (nNozzle > 0 ? SECTION_GAP : 0);
     const exhaustBudget = nExhaust > 0 ? (nExhaust * EXHAUST_H_BUDGET + Math.max(0, nExhaust - 1) * NOZZLE_GAP + SECTION_GAP) : 0;
-    const mainBudget = height - topYStart - nozzleBudget - exhaustBudget - Math.max(0, nMain - 1) * MAIN_GAP - 30;
-    graphH = Math.max(70, Math.floor(mainBudget / Math.max(1, nMain)));
+    const mainBudget = viewportH - topYStart - nozzleBudget - exhaustBudget - Math.max(0, nMain - 1) * MAIN_GAP - 30;
+    graphH = Math.max(MIN_GRAPH_H, Math.floor(mainBudget / Math.max(1, nMain)));
+
+    // Total content height — may exceed viewport
+    const contentH = topYStart + exhaustBudget + nMain * graphH + Math.max(0, nMain - 1) * MAIN_GAP + SECTION_GAP + nozzleBudget + 30;
+    height = Math.max(viewportH, contentH);
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.height = height + 'px';
+    ctx.scale(dpr, dpr);
 
     let y = topYStart;
 
     // Exhaust fan panels FIRST (top of chart)
     const EXHAUST_H = 52;
+    const exhaustColors = ['#22d3ee', '#f472b6'];  // cyan (current), pink (base)
     const allExhaust = files.filter(fd => fd.exhaust_track && fd.exhaust_track.length > 0);
     if (allExhaust.length > 0) {
         allExhaust.forEach((fd, i) => {
+            const fileIdx = files.indexOf(fd);
             panels.push({
                 type: 'exhaust',
                 yStart: y,
                 height: EXHAUST_H,
                 file: fd,
-                color: '#22d3ee',  // cyan
-                label: '🌀 Exhaust Fan'
+                color: exhaustColors[fileIdx] || exhaustColors[0],
+                label: (files.length > 1 ? (fileIdx + 1) + '. ' : '') + fd.slicer + ' Exhaust Fan'
             });
             y += EXHAUST_H + NOZZLE_GAP;
         });
@@ -287,6 +296,7 @@ function calculateLayout() {
 
     // Main extruder panels
     allExts.forEach(({ fd, extId }, i) => {
+        const fileIdx = files.indexOf(fd);
         panels.push({
             type: 'main',
             yStart: y,
@@ -294,7 +304,9 @@ function calculateLayout() {
             heater: getHeaterForExt(fd, extId),
             extId,
             file: fd,
-            color: panelColors[i % 4]
+            fileIdx,
+            color: panelColors[i % 4],
+            label: (files.length > 1 ? (fileIdx + 1) + '. ' : '') + fd.slicer + ' Ext ' + extId
         });
         y += graphH + MAIN_GAP;
     });
@@ -304,6 +316,7 @@ function calculateLayout() {
     allVortek.forEach(({ fd, fid }, i) => {
         const filColor = getFilColor(fd, fid);
         const filInfo = fd.filaments[fid] || {};
+        const fileIdx = files.indexOf(fd);
         panels.push({
             type: 'nozzle',
             yStart: y,
@@ -312,7 +325,7 @@ function calculateLayout() {
             filId: fid,
             file: fd,
             color: filColor,
-            label: fd.slicer + " T" + fid + (filInfo.type ? " " + filInfo.type : "")
+            label: (files.length > 1 ? (fileIdx + 1) + '. ' : '') + fd.slicer + " T" + fid + (filInfo.type ? " " + filInfo.type : "")
         });
         y += NOZZLE_H + NOZZLE_GAP;
     });
@@ -525,8 +538,16 @@ function draw() {
         ctx.fillStyle = (isNozzle || isExhaust) ? "#71717a" : "#e4e4e7";
         ctx.font = (isNozzle || isExhaust) ? "10px system-ui" : "bold 11px system-ui, sans-serif";
         ctx.textAlign = "left";
-        const label = isExhaust ? p.label : (isNozzle ? p.label : (p.file.slicer + " Ext " + p.extId));
-        ctx.fillText(label, 15, p.yStart + pH / 2 + 4);
+        const label = p.label;
+        // Draw colored dot indicator for exhaust panels (distinguishes current vs base)
+        let labelX = 15;
+        if (isExhaust) {
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(labelX + 4, p.yStart + pH / 2 + 1, 4, 0, Math.PI * 2); ctx.fill();
+            labelX += 14;
+            ctx.fillStyle = "#71717a";
+        }
+        ctx.fillText(label, labelX, p.yStart + pH / 2 + 4);
 
         // Grid lines: temp (°C) for main/nozzle, percentage (%) for exhaust
         if (isExhaust) {
@@ -715,9 +736,9 @@ function drawExhaustPanel(panel, scaleX, visibleWidth) {
         ctx.fillRect(l, yTop, r - l, yBot - yTop);
     }
 
-    // 2. Draw step-function line (cyan)
+    // 2. Draw step-function line (colored per panel)
     ctx.beginPath();
-    ctx.strokeStyle = '#22d3ee';
+    ctx.strokeStyle = panel.color;
     ctx.lineWidth = 1.5;
     let lastY = null;
     for (let i = 0; i < track.length; i++) {
@@ -1209,9 +1230,9 @@ canvas.addEventListener("mousemove", e => {
     draw();
 });
 canvas.addEventListener("wheel", e => {
-    e.preventDefault();
     const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left;
-    if (mx < marginLeft || mx > width - marginRight) return;
+    if (mx < marginLeft || mx > width - marginRight) return;  // allow native scroll
+    e.preventDefault();
     const vw = width - marginLeft - marginRight;
     const tuc = ((mx - marginLeft + offsetX) / (vw * scaleXVal)) * data.total_duration;
     scaleXVal = Math.max(1.0, Math.min(scaleXVal * (e.deltaY < 0 ? 1.25 : 0.8), 100.0));

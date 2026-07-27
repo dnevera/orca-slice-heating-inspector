@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.1 — 2026-07-27
+
+### Added
+- **File numbering in compare mode** — all panels (exhaust, extruder, Vortek nozzle) prefixed with `1.` / `2.` to distinguish current vs base
+- **Colored dot indicator** for exhaust fan panels — cyan (current) vs pink (base)
+- **Scrollable canvas** — vertical scroll when panels exceed viewport height (compare mode with many nozzles)
+
+### Changed
+- Exhaust fan line color now per-panel (cyan/pink) instead of hardcoded cyan
+- Main extruder panel minimum height raised to 120px (was 70px)
+- `build_wheel.py` reads version from `plugin_manifest.json` (single source of truth)
+
+### Fixed
+- Wheel event only captures inside chart area — allows native vertical scrolling in margins
+
 ## 0.3.0 — 2026-07-26
 
 ### Added

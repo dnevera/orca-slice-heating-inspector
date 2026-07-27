@@ -20,7 +20,14 @@ import zipfile
 
 DISPLAY_NAME = "Slice Heating Inspector"
 IMPORT_NAME = "orca_slice_heating_inspector"
-VERSION = "0.3.0"
+def _read_manifest_version() -> str:
+    """Read version from plugin_manifest.json (single source of truth)."""
+    import json
+    manifest_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugin_manifest.json")
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        return json.load(f)["version"]
+
+VERSION = _read_manifest_version()
 SUMMARY = (
     "Interactive temperature timeline visualization for H2C multi-nozzle G-code. "
     "Analyzes preheat/cooldown events, toolchanges, and nozzle assignments."

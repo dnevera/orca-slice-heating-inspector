@@ -2,11 +2,12 @@
   "schema_version": 1,
   "name": "Slice Heating Inspector",
   "import_name": "orca_slice_heating_inspector",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Interactive temperature timeline visualization for multi-nozzle G-code.",
   "author": "Nevera",
   "license": "MIT",
   "homepage": "git@github.com:dnevera/orca-slice-heating-inspector.git",
+  "screenshot": "rc/comparing.png",
   "requires_python": ">=3.12",
   "platforms": [
     "py3-none-any"
