@@ -5,7 +5,7 @@ Interactive temperature timeline visualization for multi-nozzle G-code.
 Analyzes preheat/cooldown events, toolchanges, nozzle assignments, and thermal profiles.
 Canvas-based zoom/pan/hover inspector with side-by-side comparison and baseline pinning support.
 
-[![Install from OrcaSlicer Cloud](https://img.shields.io/badge/OrcaSlicer_Cloud-Install-blue)](https://cloud.orcaslicer.com/p/32d6c5c7b923)
+[![Install from OrcaSlicer Cloud](https://img.shields.io/badge/OrcaSlicer_Cloud-Install-blue)](https://cloud.orcaslicer.com/p/39f27601157b)
 
 ![Dashboard](rc/dashboard.png)
 
