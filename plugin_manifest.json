@@ -7,7 +7,6 @@
   "author": "Nevera",
   "license": "MIT",
   "homepage": "git@github.com:dnevera/orca-slice-heating-inspector.git",
-  "screenshot": "rc/comparing.png",
   "requires_python": ">=3.12",
   "platforms": [
     "py3-none-any"
@@ -21,6 +20,7 @@
     "sharing_token": "39f27601157b",
     "visibility": "public"
   },
+  "screenshot": "rc/comparing.png",
   "readme": "README.md",
   "build_script": "build_wheel.py",
   "dist_dir": "dist",
