@@ -3,7 +3,8 @@
 ## 0.3.2 — 2026-07-27
 
 ### Fixed
-- Manifest `type` now declares both `script` and `slicing_pipeline` (was missing `slicing_pipeline`)
+- Manifest `type` now declares both `script` and `slicing-pipeline` (was missing)
+- Manifest type value uses hyphen (`slicing-pipeline`) per Cloud API spec
 
 ## 0.3.1 — 2026-07-27
 
