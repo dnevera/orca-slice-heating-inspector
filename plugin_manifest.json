@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "name": "orca-slice-heating-inspector",
+  "import_name": "orca_slice_heating_inspector",
+  "version": "0.3.0",
+  "description": "Interactive temperature timeline visualization for multi-nozzle G-code.",
+  "author": "",
+  "license": "MIT",
+  "homepage": "git@github.com:dnevera/orca-slice-heating-inspector.git",
+  "requires_python": ">=3.12",
+  "platforms": [
+    "py3-none-any"
+  ],
+  "type": [
+    "script"
+  ],
+  "tags": [],
+  "cloud": {
+    "uuid": null,
+    "sharing_token": null,
+    "visibility": "public"
+  },
+  "readme": "README.md",
+  "build_script": "build_wheel.py",
+  "dist_dir": "dist",
+  "changelog": []
+}
