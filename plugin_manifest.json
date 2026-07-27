@@ -12,7 +12,8 @@
     "py3-none-any"
   ],
   "type": [
-    "script"
+    "script",
+    "slicing_pipeline"
   ],
   "tags": [],
   "cloud": {
